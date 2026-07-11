@@ -1,0 +1,38 @@
+name: Meteorological Weather Sync
+
+on:
+  schedule:
+    # Trigger twice daily at 00:00 and 12:00 UTC (100% Free Cron)
+    - cron: '0 */12 * * *'
+  workflow_dispatch:
+    inputs:
+      app_url_override:
+        description: 'Optional APP_BASE_URL override for manual execution'
+        required: false
+        type: string
+
+jobs:
+  weather-sync:
+    name: Execute Meteorological Multi-Tenant Sync
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js Runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci || npm install
+
+      - name: Run Meteorological Sync Orchestrator
+        run: npx tsx scripts/weather-sync-orchestrator.ts
+        env:
+          FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+          APP_BASE_URL: ${{ github.event.inputs.app_url_override || secrets.APP_BASE_URL }}
+          TASK_WORKER_SECRET: ${{ secrets.TASK_WORKER_SECRET || 'sec_default_task_secret' }}
+          WEATHER_API_KEY: ${{ secrets.WEATHER_API_KEY }}
