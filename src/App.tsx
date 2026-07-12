@@ -26,6 +26,7 @@ import {
   Sparkles,
   Info
 } from "lucide-react";
+import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 import { HVACClient, PipelineRun, PipelineLog } from "./types";
 import { db } from "./firebase";
 import { collection, onSnapshot, query } from "firebase/firestore";
@@ -58,6 +59,7 @@ export default function App() {
   const [checkoutDomain, setCheckoutDomain] = useState("gulfstreamac.com");
   const [checkoutCity, setCheckoutCity] = useState("Dallas");
   const [checkoutPhone, setCheckoutPhone] = useState("(214) 555-0199");
+  const [selectedTier, setSelectedTier] = useState<"static" | "ai-adaptive">("ai-adaptive");
   const [isSubmittingCheckout, setIsSubmittingCheckout] = useState(false);
   const [checkoutLog, setCheckoutLog] = useState<string[]>([]);
   const [checkoutStep, setCheckoutStep] = useState<number>(0);
@@ -1286,32 +1288,134 @@ exports.weatherWebmasterPipeline = async (req, res) => {
 
                   {/* PayPal Buttons */}
                   <div className="flex flex-col gap-4">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="font-sans text-xs text-slate-500">Product ID: LIVING-OS-SUBSCRIBE</span>
-                      <span className="font-bold text-slate-700 font-sans">$199 / month</span>
+                    <div className="flex flex-col gap-2">
+                      <label className="font-sans text-xs font-bold text-slate-700 uppercase mb-1">Select Subscription Tier</label>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => setSelectedTier("static")}
+                          className={`flex-1 border p-3 rounded text-left transition-all ${
+                            selectedTier === "static" ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500" : "border-slate-200 hover:border-slate-300"
+                          }`}
+                        >
+                          <div className="text-sm font-semibold text-slate-800">Static</div>
+                          <div className="text-xs text-slate-500 mt-1">Standard template</div>
+                          <div className="text-sm font-bold text-slate-700 mt-2">$49 / month</div>
+                        </button>
+                        <button
+                          onClick={() => setSelectedTier("ai-adaptive")}
+                          className={`flex-1 border p-3 rounded text-left transition-all ${
+                            selectedTier === "ai-adaptive" ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500" : "border-slate-200 hover:border-slate-300"
+                          }`}
+                        >
+                          <div className="text-sm font-semibold text-slate-800">AI-Adaptive</div>
+                          <div className="text-xs text-slate-500 mt-1">Dynamic vertical matching</div>
+                          <div className="text-sm font-bold text-slate-700 mt-2">$199 / month</div>
+                        </button>
+                      </div>
                     </div>
 
-                    {/* PayPal Gold Button */}
-                    <button
-                      onClick={() => handlePayPalSubscriptionSimulate()}
-                      disabled={isSubmittingCheckout || !checkoutName || !checkoutZipCode}
-                      className={`relative w-full py-3.5 px-4 bg-[#ffc439] hover:bg-[#f4b31a] text-white font-sans font-bold text-sm tracking-wide transition-all shadow-md flex items-center justify-center gap-2 ${
-                        isSubmittingCheckout ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
-                      }`}
-                    >
-                      <span className="italic text-white font-black tracking-tight text-base font-serif">PayPal</span>
-                      <span className="text-[12px] font-semibold text-slate-900">Subscribe</span>
-                    </button>
+                    <div className="flex justify-between items-center text-xs mt-2">
+                      <span className="font-sans text-xs text-slate-500">Product ID: {selectedTier === "static" ? "LIVING-OS-STATIC" : "LIVING-OS-ADAPTIVE"}</span>
+                      <span className="font-bold text-slate-700 font-sans">{selectedTier === "static" ? "$49" : "$199"} / month</span>
+                    </div>
 
-                    {/* PayPal Credit Card Button */}
+                    <PayPalScriptProvider options={{ clientId: import.meta.env.VITE_PAYPAL_CLIENT_ID || "test", components: "buttons", currency: "USD" }}>
+                      <PayPalButtons 
+                        style={{ layout: "vertical" }}
+                        disabled={isSubmittingCheckout || !checkoutName || !checkoutZipCode}
+                        createOrder={(data, actions) => {
+                          return actions.order.create({
+                            intent: "CAPTURE",
+                            purchase_units: [
+                              {
+                                amount: {
+                                  value: selectedTier === "static" ? "49.00" : "199.00",
+                                  currency_code: "USD"
+                                },
+                                description: `Living OS Subscription - ${selectedTier === "static" ? "Static" : "AI-Adaptive"}`,
+                                custom_id: JSON.stringify({
+                                  businessName: checkoutName,
+                                  zipCode: checkoutZipCode,
+                                  tier: selectedTier
+                                })
+                              }
+                            ]
+                          });
+                        }}
+                        onApprove={async (data, actions) => {
+                          if (!actions.order) return;
+                          
+                          setIsSubmittingCheckout(true);
+                          setCheckoutStep(1); // Verifying payment...
+                          setCheckoutLog([`[PAYPAL SDK] Initializing payment session...`]);
+
+                          try {
+                            const details = await actions.order.capture();
+                            setCheckoutLog(prev => [...prev, `[PAYPAL SDK] Customer approved payment. Transaction ID: ${details.id}`]);
+                            setCheckoutStep(2); // Analyzing territory data...
+                            
+                            // Note: In a real production flow, your backend webhook (/api/webhooks/paypal) 
+                            // would receive the event and asynchronously provision the client.
+                            // To simulate that same async backend experience here on the frontend quickly:
+                            const mockTxId = details.id;
+                            const mockTime = new Date().toISOString();
+                            const mockSig = `sig_live_${Math.random().toString(36).substring(2, 24)}`;
+                            const mockCertUrl = "https://api.paypal.com/v1/certs/mock-cert-bundle.pem";
+                      
+                            const wait = (ms: number) => new Promise(res => setTimeout(res, ms));
+                            await wait(600);
+                            setCheckoutStep(3); // Generating dynamic layout...
+                      
+                            const res = await fetch("/api/webhooks/mock-paypal", {
+                              method: "POST",
+                              headers: { 
+                                "Content-Type": "application/json",
+                                "paypal-transmission-id": mockTxId,
+                                "paypal-transmission-time": mockTime,
+                                "paypal-transmission-sig": mockSig,
+                                "paypal-cert-url": mockCertUrl,
+                                "paypal-auth-algo": "SHA256withRSA"
+                              },
+                              body: JSON.stringify({
+                                event_type: "CHECKOUT.ORDER.APPROVED",
+                                resource: {
+                                  custom_id: JSON.stringify({
+                                    businessName: checkoutName,
+                                    zipCode: checkoutZipCode
+                                  })
+                                }
+                              })
+                            });
+                      
+                            if (!res.ok) {
+                              throw new Error(`Server returned HTTP Status ${res.status}`);
+                            }
+                      
+                            setCheckoutStep(4); // Deploying to edge...
+                            await wait(1000);
+                      
+                            setCheckoutStep(5); // Complete!
+                            setTimeout(() => setActiveTab("tenants"), 2000);
+                          } catch (err: any) {
+                            setCheckoutLog(prev => [...prev, `[ERROR] ${err.message || err.toString()}`]);
+                            setCheckoutStep(-1);
+                          } finally {
+                            setIsSubmittingCheckout(false);
+                          }
+                        }}
+                        onError={(err) => {
+                          setCheckoutLog(prev => [...prev, `[ERROR] PayPal Error: ${err.toString()}`]);
+                          setCheckoutStep(-1);
+                        }}
+                      />
+                    </PayPalScriptProvider>
+                    
                     <button
                       onClick={() => handlePayPalSubscriptionSimulate()}
                       disabled={isSubmittingCheckout || !checkoutName || !checkoutZipCode}
-                      className={`relative w-full py-3.5 px-4 bg-white hover:bg-slate-100 text-slate-900 font-sans font-semibold text-xs tracking-wide transition-all shadow-md flex items-center justify-center gap-2 border border-slate-200 shadow-sm ${
-                        isSubmittingCheckout ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
-                      }`}
+                      className="mt-2 text-[10px] text-slate-400 hover:text-slate-600 underline text-center w-full"
                     >
-                      <span>Pay with Debit or Credit Card</span>
+                      (Or click here to run webhook simulation directly without payment)
                     </button>
                   </div>
                 </div>

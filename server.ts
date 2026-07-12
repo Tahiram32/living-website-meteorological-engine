@@ -1599,7 +1599,7 @@ function generateTenantDomain(businessName: string): string {
 }
 
 // Enterprise Onboarding Resolver: Resolves Zip Code, guesses/generates vertical, and provisions the initial state
-async function generateTenantProfileAndBaseline(rawBusinessName: string, zipCode: string) {
+async function generateTenantProfileAndBaseline(rawBusinessName: string, zipCode: string, tier: string = "ai-adaptive") {
   // 1. Check with Prompt Injection Evaluator first (Semantic Shield)
   let safeRawName = rawBusinessName;
   try {
@@ -1630,6 +1630,8 @@ async function generateTenantProfileAndBaseline(rawBusinessName: string, zipCode
         - ZIP Code: "${zipCode}"
         
         Generate the complete onboarding configuration profile according to the provided schema.
+        
+        Tier context: The user has purchased the "${tier}" tier. If the tier is "static", provide a baseline, simple profile. If "ai-adaptive", make it extremely dynamic and highly specific.
       `;
       
       const result = await ai.models.generateContent({
@@ -1778,7 +1780,7 @@ async function generateTenantProfileAndBaseline(rawBusinessName: string, zipCode
 }
 
 // 7.5 Decoupled Background Tenant Provisioning Worker
-async function runBackgroundTenantProvisioning(transmissionId: string | undefined, event: any, businessName: string, zipCode: string) {
+async function runBackgroundTenantProvisioning(transmissionId: string | undefined, event: any, businessName: string, zipCode: string, tier: string = "ai-adaptive") {
   console.log(`🛡️ [BACKGROUND WORKER] Starting asynchronous tenant generation for: "${businessName}" (${zipCode})...`);
   
   if (transmissionId) {
@@ -1790,7 +1792,8 @@ async function runBackgroundTenantProvisioning(transmissionId: string | undefine
         queuedAt: new Date().toISOString(),
         eventType: event?.event_type || null,
         businessName,
-        zipCode
+        zipCode,
+        tier
       });
     } catch (err: any) {
       console.warn("Failed to set initial processing status in Firestore:", err.message);
@@ -1798,7 +1801,7 @@ async function runBackgroundTenantProvisioning(transmissionId: string | undefine
   }
 
   try {
-    const clientData = await generateTenantProfileAndBaseline(businessName, zipCode);
+    const clientData = await generateTenantProfileAndBaseline(businessName, zipCode, tier);
     const domain = clientData.domain;
     const docRef = doc(db, "clients", domain);
 
@@ -1844,6 +1847,7 @@ async function enqueueProvisioningTask(payload: {
   event: any;
   businessName: string;
   zipCode: string;
+  tier: string;
 }) {
   const isProd = process.env.NODE_ENV === "production";
   const projectId = process.env.GCP_PROJECT_ID;
@@ -2026,7 +2030,8 @@ app.post("/api/webhooks/paypal/process", requireRole(["worker", "unified"]), ver
     console.log(`🛡️ [DECOUPLED LOOPBACK WORKER] Executing tenant provisioning for "${businessName}"...`);
     
     // Perform heavy Gemini call and Firestore writes while maintaining active container CPU allocation
-    await runBackgroundTenantProvisioning(transmissionId, event, businessName, zipCode);
+    const tier = req.body.tier || "ai-adaptive";
+    await runBackgroundTenantProvisioning(transmissionId, event, businessName, zipCode, tier);
     
     return res.status(200).json({ status: "success", businessName });
   } catch (err: any) {
@@ -2128,6 +2133,7 @@ app.post("/api/webhooks/paypal", requireRole(["gateway", "unified"]), verifyPayP
     // 3. THIRD: Tenant Provisioning and Database Updates (Synchronous to prevent Serverless execution throttling/termination)
     const isSuccessEvent = event?.event_type === "BILLING.SUBSCRIPTION.ACTIVATED" || 
                            event?.event_type === "PAYMENT.SALE.COMPLETED" ||
+                           event?.event_type === "CHECKOUT.ORDER.APPROVED" ||
                            event?.event_type === "BILLING.SUBSCRIPTION.CREATED";
 
     if (isSuccessEvent) {
@@ -2154,11 +2160,13 @@ app.post("/api/webhooks/paypal", requireRole(["gateway", "unified"]), verifyPayP
       
       let businessName = "";
       let zipCode = "";
+      let tier = "ai-adaptive";
       if (customIdStr) {
         try {
           const parsedCustom = JSON.parse(customIdStr);
           businessName = parsedCustom.businessName || "";
           zipCode = parsedCustom.zipCode || "";
+          tier = parsedCustom.tier || "ai-adaptive";
         } catch (e) {
           // Fallback to split if parsing raw text CSV
           const parts = customIdStr.split(",");
@@ -2258,6 +2266,7 @@ if (process.env.NODE_ENV !== "production") {
       // 2. SECOND: Synchronous Tenant Provisioning and Database Updates to prevent serverless throttling
       const isSuccessEvent = event?.event_type === "BILLING.SUBSCRIPTION.ACTIVATED" || 
                              event?.event_type === "PAYMENT.SALE.COMPLETED" ||
+                             event?.event_type === "CHECKOUT.ORDER.APPROVED" ||
                              event?.event_type === "BILLING.SUBSCRIPTION.CREATED";
 
       if (isSuccessEvent) {
@@ -2284,11 +2293,13 @@ if (process.env.NODE_ENV !== "production") {
         
         let businessName = "";
         let zipCode = "";
+        let tier = "ai-adaptive";
         if (customIdStr) {
           try {
             const parsedCustom = JSON.parse(customIdStr);
             businessName = parsedCustom.businessName || "";
             zipCode = parsedCustom.zipCode || "";
+            tier = parsedCustom.tier || "ai-adaptive";
           } catch (e) {
             const parts = customIdStr.split(",");
             if (parts.length >= 2) {
@@ -2314,7 +2325,8 @@ if (process.env.NODE_ENV !== "production") {
           transmissionId,
           event,
           businessName,
-          zipCode
+          zipCode,
+          tier
         });
 
         if (queueDispatch.provider === "failed") {
