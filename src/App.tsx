@@ -219,6 +219,9 @@ export default function App() {
         body: JSON.stringify({
           event_type: "BILLING.SUBSCRIPTION.ACTIVATED",
           resource: {
+            subscriber: {
+              email_address: "simulated.customer@example.com"
+            },
             custom_id: JSON.stringify({
               businessName: checkoutName,
               zipCode: checkoutZipCode
@@ -1342,6 +1345,9 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                             body: JSON.stringify({
                               event_type: "CHECKOUT.ORDER.APPROVED",
                               resource: {
+                                payer: {
+                                  email_address: details.payer?.email_address || "business@example.com"
+                                },
                                 custom_id: JSON.stringify({
                                   businessName: checkoutName,
                                   zipCode: checkoutZipCode
