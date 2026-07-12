@@ -10,6 +10,10 @@
 
 terraform {
   required_version = ">= 1.3.0"
+  backend "gcs" {
+    bucket  = "paypal-infrastructure-tfstate"
+    prefix  = "terraform/state"
+  }
   required_providers {
     google = {
       source  = "hashicorp/google"
@@ -76,29 +80,7 @@ resource "google_service_account" "tasks_invoker_sa" {
   description  = "Used by Cloud Tasks to sign Google OIDC tokens when calling the private worker."
 }
 
-# --- CUSTOM IAM ROLES ---
-
-# Custom Firestore Write-Only role to enforce Least Privilege for Service A
-resource "google_project_iam_custom_role" "firestore_write_only" {
-  role_id     = "FirestoreWriteOnly"
-  title       = "Firestore Write-Only"
-  description = "Enables document creation and updating without permission to read documents."
-  permissions = [
-    "datastore.entities.create",
-    "datastore.entities.update"
-  ]
-}
-
 # --- IAM BINDINGS (LEAST PRIVILEGE ENFORCEMENT) ---
-
-# Bind custom write-only Firestore permissions to the Gateway Service Account
-resource "google_project_iam_binding" "gateway_firestore_write" {
-  project = var.project_id
-  role    = google_project_iam_custom_role.firestore_write_only.id
-  members = [
-    "serviceAccount:${google_service_account.gateway_sa.email}"
-  ]
-}
 
 # Bind Cloud Tasks Enqueuer role to Gateway Service Account (so it can queue tasks)
 resource "google_project_iam_binding" "gateway_cloudtasks_enqueuer" {

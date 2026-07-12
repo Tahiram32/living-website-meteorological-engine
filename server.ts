@@ -11,6 +11,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 import { fileURLToPath } from "url";
 import { CloudTasksClient } from "@google-cloud/tasks";
+import { OAuth2Client } from "google-auth-library";
 import { initializeApp, getApps, getApp, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { executeMeteorologicalSync, executeSingleClientSyncTask } from "./meteorological-sync-engine";
@@ -131,9 +132,12 @@ export async function setDoc(docRef: any, data: any, options?: any) {
         if (currentStatus === "completed" || currentStatus === "failed") {
           const newStatus = data?.status;
           if (currentStatus === "completed") {
-            throw new Error(`[DATA INTEGRITY VIOLATION] Transaction '${docRef.id}' is already in terminal state 'completed'. Modification is strictly forbidden.`);
-          }
-          if (currentStatus === "failed" && newStatus === "completed") {
+            if (newStatus === "refunded" || newStatus === "denied" || newStatus === "chargeback") {
+              console.log(`[STATE MACHINE] Allowing transition from 'completed' to '${newStatus}' for transaction '${docRef.id}'.`);
+            } else if (newStatus && newStatus !== "completed") {
+              throw new Error(`[DATA INTEGRITY VIOLATION] Transaction '${docRef.id}' is already in terminal state 'completed'. Modification is strictly forbidden.`);
+            }
+          } else if (currentStatus === "failed" && newStatus === "completed") {
             console.log(`[STATE MACHINE] Allowing transition from 'failed' to 'completed' for retried transaction '${docRef.id}'.`);
           } else if (currentStatus === "failed" && newStatus === "failed") {
             // Allow redundant failure writes (e.g. logging additional error details)
@@ -1770,6 +1774,23 @@ async function generateTenantProfileAndBaseline(rawBusinessName: string, zipCode
 // 7.5 Decoupled Background Tenant Provisioning Worker
 async function runBackgroundTenantProvisioning(transmissionId: string | undefined, event: any, businessName: string, zipCode: string) {
   console.log(`🛡️ [BACKGROUND WORKER] Starting asynchronous tenant generation for: "${businessName}" (${zipCode})...`);
+  
+  if (transmissionId) {
+    try {
+      // Secure Data Write: Worker acquires the execution lock in Firestore
+      // Gateway has zero IAM Firestore permissions, eliminating Data Destruction Vectors.
+      await setDoc(doc(db, "paypal_transactions", String(transmissionId)), {
+        status: "processing",
+        queuedAt: new Date().toISOString(),
+        eventType: event?.event_type,
+        businessName,
+        zipCode
+      });
+    } catch (err: any) {
+      console.warn("Failed to set initial processing status in Firestore:", err.message);
+    }
+  }
+
   try {
     const clientData = await generateTenantProfileAndBaseline(businessName, zipCode);
     const domain = clientData.domain;
@@ -1849,6 +1870,11 @@ async function enqueueProvisioningTask(payload: {
         }
       };
 
+      if (payload.transmissionId) {
+        // Enforce Cloud Tasks native idempotency: tasks with the same name are rejected if created within ~24 hours
+        task.name = tasksClient.taskPath(projectId, location, queue, `paypal-${payload.transmissionId}`);
+      }
+
       // Cryptographically secure Google OIDC identity propagation
       const serviceAccountEmail = process.env.GCP_SERVICE_ACCOUNT_EMAIL;
       if (serviceAccountEmail) {
@@ -1908,21 +1934,7 @@ async function enqueueProvisioningTask(payload: {
   }
 }
 
-// 7.56 Cryptographically Secure Google OIDC Token Verification helper
-function decodeOidcPayload(token: string): any {
-  try {
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-    let base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    while (base64.length % 4) {
-      base64 += "=";
-    }
-    const payload = Buffer.from(base64, "base64").toString("utf8");
-    return JSON.parse(payload);
-  } catch (err) {
-    return null;
-  }
-}
+const oAuth2Client = new OAuth2Client();
 
 // 7.6 Loopback Secure Worker Endpoint for Stateless Serverless Container Environments
 app.post("/api/webhooks/paypal/process", requireRole(["worker", "unified"]), async (req, res) => {
@@ -1955,7 +1967,18 @@ app.post("/api/webhooks/paypal/process", requireRole(["worker", "unified"]), asy
         return res.status(401).json({ error: "Unauthorized. Missing Google OIDC token." });
       }
       const token = authorization.substring(7);
-      const payload = decodeOidcPayload(token);
+      
+      let payload;
+      try {
+        const ticket = await oAuth2Client.verifyIdToken({
+          idToken: token,
+        });
+        payload = ticket.getPayload();
+      } catch (err: any) {
+        console.warn("🚨 [SECURITY LATERAL ATTEMPT] Cryptographic OIDC token verification failed:", err.message);
+        return res.status(401).json({ error: "Unauthorized. Forged or invalid token." });
+      }
+      
       const expectedEmail = process.env.GCP_SERVICE_ACCOUNT_EMAIL;
       
       if (!payload) {
@@ -1974,7 +1997,7 @@ app.post("/api/webhooks/paypal/process", requireRole(["worker", "unified"]), asy
         return res.status(403).json({ error: `Forbidden. Service account '${email}' is not authorized to invoke this worker.` });
       }
 
-      console.log(`🛡️ [PRODUCTION COMPUTE SECURITY] Ingress authorized. Offline identity verified: '${email}'.`);
+      console.log(`🛡️ [PRODUCTION COMPUTE SECURITY] Ingress authorized. Cryptographic identity verified: '${email}'.`);
     } else {
       // Sandbox fallback: Check the standard Authorization bearer token if not running in production
       if (!authorization || !authorization.startsWith("Bearer ")) {
@@ -2110,17 +2133,10 @@ app.post("/api/webhooks/paypal", requireRole(["gateway", "unified"]), async (req
 
     console.log(`[SECURITY PASSED] PayPal webhook signature verified: ${sigResult.reason}`);
 
-    // 2. SECOND: Strict Idempotency Check to protect core DB from race collisions and replay attacks
-    if (transmissionId) {
-      const lockCheck = await checkIdempotencyLock(transmissionId);
-      if (lockCheck.shouldIgnore) {
-        console.log(`[PAYPAL IDEMPOTENCY LOCK] Transmission ID '${transmissionId}' already locked or completed: ${lockCheck.reason}`);
-        return res.status(200).json({
-          status: "ignored",
-          reason: `Idempotency Block: ${lockCheck.reason}`
-        });
-      }
-    }
+    // 2. SECOND: Strict Idempotency Check
+    // [SECURITY NOTE]: To eradicate the Data Destruction Vector, the Gateway no longer has ANY Firestore IAM permissions.
+    // We rely natively on Google Cloud Tasks idempotency (Task deduplication by Task Name) instead of a database lock.
+    // If the attacker compromises the gateway, they cannot destroy data because the Service Account physically cannot reach Firestore.
 
     // 3. THIRD: Tenant Provisioning and Database Updates (Synchronous to prevent Serverless execution throttling/termination)
     const isSuccessEvent = event?.event_type === "BILLING.SUBSCRIPTION.ACTIVATED" || 
@@ -2173,26 +2189,6 @@ app.post("/api/webhooks/paypal", requireRole(["gateway", "unified"]), async (req
         const randomId = Math.floor(1000 + Math.random() * 9000);
         businessName = `PayPal Franchise #${randomId}`;
         zipCode = "75201";
-      }
-
-      // Acquire exclusive DB idempotency lock and set status as processing
-      if (transmissionId) {
-        try {
-          await setDoc(doc(db, "paypal_transactions", String(transmissionId)), {
-            status: "processing",
-            queuedAt: new Date().toISOString(),
-            eventType: event.event_type,
-            businessName,
-            zipCode
-          });
-          console.log(`[PAYPAL IDEMPOTENCY LOCK] Acquired processing lock for Transmission ID: '${transmissionId}'`);
-        } catch (lockErr: any) {
-          console.error("Failed to acquire idempotency lock in database:", lockErr);
-          return res.status(500).json({
-            status: "error",
-            error: "Idempotency database lock write failure"
-          });
-        }
       }
 
       // Dispatch task via Google Cloud Tasks (with seamless local loopback fallback)

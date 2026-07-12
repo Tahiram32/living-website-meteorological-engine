@@ -13,16 +13,17 @@ service cloud.firestore {
       // Disallow all client-side reads and deletes to prevent data harvesting and exfiltration
       allow read, delete: if false;
       
-      // Allow creation with strict structural checks (only 'created', 'processing', 'completed', 'failed' states are permitted)
-      allow create: if request.resource.data.status in ['created', 'processing', 'completed', 'failed']
+      // Allow creation with strict structural checks
+      allow create: if request.resource.data.status in ['created', 'processing', 'completed', 'failed', 'refunded', 'denied', 'chargeback']
                     && request.resource.data.keys().hasAll(['status']);
                     
       // Enforce the transaction state machine at the database layer.
-      // 1. Once a transaction is marked as 'completed', it can NEVER be updated or reverted to any other state.
-      // 2. Once a transaction is marked as 'failed', it can only transition to 'completed' via an explicit authorized retry, never back to 'processing' or 'created'.
-      // 3. Document payload is protected from fields modification like 'createdAt' or 'transmissionId' to preserve history.
-      allow update: if resource.data.status != 'completed'
-                    && (resource.data.status != 'failed' || request.resource.data.status == 'completed')
+      allow update: if (
+                      (resource.data.status == 'completed' && request.resource.data.status in ['completed', 'refunded', 'denied', 'chargeback']) ||
+                      (resource.data.status == 'failed' && request.resource.data.status in ['failed', 'completed']) ||
+                      (!(resource.data.status in ['completed', 'failed', 'refunded', 'denied', 'chargeback'])) ||
+                      (resource.data.status == request.resource.data.status)
+                    )
                     && (!request.resource.data.keys().hasAny(['createdAt']) || request.resource.data.createdAt == resource.data.createdAt);
     }
   }
