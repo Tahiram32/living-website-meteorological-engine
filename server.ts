@@ -595,6 +595,30 @@ app.post("/api/pipeline/task-worker", async (req, res) => {
     });
   } catch (err: any) {
     console.error(`❌ [TASK-WORKER-FAIL] Background worker failed for tenant '${req.body?.domain}':`, err.message);
+    
+    const errStr = JSON.stringify(err).toLowerCase();
+    const errMsg = (err?.message || "").toLowerCase();
+    const isRateLimit = 
+      errMsg.includes("429") || 
+      errMsg.includes("resource_exhausted") || 
+      errMsg.includes("quota") ||
+      errMsg.includes("rate") ||
+      errStr.includes("429") ||
+      errStr.includes("resource_exhausted") ||
+      errStr.includes("quota") ||
+      err?.statusCode === 429 ||
+      err?.code === 429 ||
+      err?.error?.code === 429 ||
+      err?.error?.status === "RESOURCE_EXHAUSTED";
+
+    if (isRateLimit) {
+      return res.status(429).json({
+        status: "failed",
+        error: "Rate Limit Exceeded (Distributed Circuit Breaker Active)",
+        details: err.message
+      });
+    }
+
     return res.status(500).json({
       status: "failed",
       error: err.message

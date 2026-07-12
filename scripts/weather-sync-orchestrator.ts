@@ -170,84 +170,141 @@ async function runOrchestrator() {
     await addLog("info", `Prepared mutation queue. Concurrency limit: ${concurrencyLimit}, Stagger Throttle: ${throttleMs}ms. Invoking ${mutationQueue.length} isolated tenant worker endpoints...`);
 
     let activeCount = 0;
+    let orchestratorPausedUntil = 0;
+    let lastDispatchTime = 0;
+    const maxAttempts = 3;
 
-    // Helper to execute a single task worker endpoint
-    const runTaskWorker = async (task: any, index: number) => {
-      const { client, weather } = task;
-      const domain = client.domain;
-      await addLog("info", `[Queue ${index + 1}/${mutationQueue.length}] Launching concurrent webhook trigger for: ${domain} (City: ${client.city} | Temp: ${weather.temp}°F)`);
+    // Convert mutationQueue to dynamic task items
+    const tasksToProcess = mutationQueue.map((item, index) => ({
+      ...item,
+      index,
+      attempts: 0
+    }));
 
+    const recordTaskFailure = async (domain: string, message: string) => {
       try {
-        const workerUrl = `${normalizedBaseUrl}/api/pipeline/task-worker`;
-        const response = await fetch(workerUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${taskWorkerSecret}`
-          },
-          body: JSON.stringify({
-            domain,
-            weather,
-            runLogRefId: logRefId
-          })
-        });
+        await db.runTransaction(async (transaction) => {
+          const docSnap = await transaction.get(runLogRef);
+          if (docSnap.exists) {
+            const runData = docSnap.data() as any;
+            runData.processedClients = (runData.processedClients || 0) + 1;
+            runData.failedClients = (runData.failedClients || 0) + 1;
+            
+            if (!runData.logs) runData.logs = [];
+            runData.logs.push({
+              timestamp: new Date().toLocaleTimeString(),
+              level: "error",
+              message: `[Orchestrator Permanent FAIL] Failed to process ${domain}: ${message}`
+            });
 
-        if (!response.ok) {
-          const bodyText = await response.text();
-          throw new Error(`Worker HTTP ${response.status}: ${bodyText}`);
-        }
-
-        const resData = await response.json();
-        console.log(`✅ [Worker Success] Tenant ${domain} completed successfully:`, resData);
-      } catch (err: any) {
-        await addLog("error", `[Worker Failed] Micro-tenant mutation failed for ${domain}: ${err.message}`);
-        
-        // Thread-safe update of run statistics in Firestore
-        try {
-          await db.runTransaction(async (transaction) => {
-            const docSnap = await transaction.get(runLogRef);
-            if (docSnap.exists) {
-              const runData = docSnap.data() as any;
-              runData.processedClients = (runData.processedClients || 0) + 1;
-              runData.failedClients = (runData.failedClients || 0) + 1;
-              if (runData.processedClients >= runData.totalClients) {
-                runData.status = "completed";
-                runData.completedAt = new Date().toISOString();
-              }
-              transaction.set(runLogRef, runData);
+            if (runData.processedClients >= runData.totalClients) {
+              runData.status = (runData.failedClients || 0) > 0 ? "failed" : "completed";
+              runData.completedAt = new Date().toISOString();
             }
-          });
-        } catch (updateErr: any) {
-          console.error(`Failed to update run stats for ${domain}:`, updateErr.message);
-        }
+            transaction.set(runLogRef, runData);
+          }
+        });
+      } catch (updateErr: any) {
+        console.error(`Failed to update run stats for ${domain}:`, updateErr.message);
       }
     };
 
-    // Sliding-Window Dispatch Queue
-    // This loop executes sequentially to space out dispatches via throttleMs, avoiding timer heap bloat,
-    // while strictly holding back new triggers if we are at our concurrency ceiling (preventing EMFILE / socket starvation)
-    for (let i = 0; i < mutationQueue.length; i++) {
-      // 1. Apply backpressure: If active worker count is at capacity, block dispatch until a slot opens
-      while (activeCount >= concurrencyLimit) {
-        await new Promise(resolve => setTimeout(resolve, 200));
+    const dispatchNext = async () => {
+      // 1. If the orchestrator is paused due to an active circuit breaker state, do not dequeue
+      const now = Date.now();
+      if (orchestratorPausedUntil > now) {
+        return;
       }
 
-      // 2. Pace the dispatch: Enforce throttle delay one task at a time (at most one setTimeout in Event Loop at any moment)
-      if (i > 0 && throttleMs > 0) {
-        await new Promise(resolve => setTimeout(resolve, throttleMs));
+      // 2. Enforce concurrency limit and stop if queue is empty
+      if (activeCount >= concurrencyLimit || tasksToProcess.length === 0) {
+        return;
       }
 
-      const task = mutationQueue[i];
+      // 3. Respect stagger throttle delay between dispatches
+      const timeSinceLastDispatch = now - lastDispatchTime;
+      if (timeSinceLastDispatch < throttleMs) {
+        return;
+      }
+
+      // Dequeue next task
+      const task = tasksToProcess.shift();
+      if (!task) return;
+
       activeCount++;
+      lastDispatchTime = Date.now();
 
-      // Dispatch asynchronously without awaiting
-      runTaskWorker(task, i).finally(() => {
-        activeCount--;
-      });
-    }
+      const { client, weather, index } = task;
+      const domain = client.domain;
 
-    // 3. Block main orchestrator termination until the final worker thread resolves
-    while (activeCount > 0) {
+      await addLog("info", `[Orchestrator Dispatch] Launching worker trigger for: ${domain} (Attempt ${task.attempts + 1}/${maxAttempts})`);
+
+      // Spawn asynchronously (non-blocking thread execution)
+      (async () => {
+        try {
+          const workerUrl = `${normalizedBaseUrl}/api/pipeline/task-worker`;
+          const response = await fetch(workerUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${taskWorkerSecret}`
+            },
+            body: JSON.stringify({
+              domain,
+              weather,
+              runLogRefId: logRefId
+            })
+          });
+
+          if (response.status === 429) {
+            const bodyText = await response.text();
+            throw { isRateLimit: true, message: `HTTP 429 rate limit returned by worker: ${bodyText}` };
+          }
+
+          if (!response.ok) {
+            const bodyText = await response.text();
+            throw new Error(`Worker HTTP ${response.status}: ${bodyText}`);
+          }
+
+          const resData = await response.json();
+          console.log(`✅ [Worker Success] Tenant ${domain} completed successfully:`, resData);
+        } catch (err: any) {
+          if (err?.isRateLimit) {
+            const cooldownSeconds = 60;
+            orchestratorPausedUntil = Date.now() + (cooldownSeconds * 1000);
+            await addLog("warn", `🚨 [ORCHESTRATOR CIRCUIT BREAKER TRIPPED] Worker for ${domain} reported Gemini rate-limit. Pausing all launches for ${cooldownSeconds}s...`);
+
+            if (task.attempts < maxAttempts - 1) {
+              task.attempts++;
+              // Put back at the beginning of the queue to retry immediately when cooldown expires
+              tasksToProcess.unshift(task);
+              await addLog("info", `🔄 [RE-QUEUED] Re-enqueuing task for ${domain} for post-cooldown retry.`);
+            } else {
+              await addLog("error", `❌ [ABANDONED] Max retries (${maxAttempts}) exceeded for rate-limited domain: ${domain}`);
+              await recordTaskFailure(domain, `Max rate-limiting retries reached: ${err.message}`);
+            }
+          } else {
+            // Permanent non-429 error (e.g. invalid client data, geocode issue). Do not retry.
+            await addLog("error", `[Worker Permanent Failed] Micro-tenant mutation failed for ${domain}: ${err.message}`);
+            await recordTaskFailure(domain, err.message);
+          }
+        } finally {
+          activeCount--;
+          triggerDispatch();
+        }
+      })();
+
+      // Recurse/check next slot
+      triggerDispatch();
+    };
+
+    const triggerDispatch = () => {
+      setTimeout(dispatchNext, 50);
+    };
+
+    // Drive the scheduling engine
+    while (tasksToProcess.length > 0 || activeCount > 0) {
+      triggerDispatch();
       await new Promise(resolve => setTimeout(resolve, 500));
     }
 
