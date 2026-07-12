@@ -1710,6 +1710,7 @@ async function enqueueProvisioningTask(payload: {
   businessName: string;
   zipCode: string;
 }) {
+  const isProd = process.env.NODE_ENV === "production";
   const projectId = process.env.GCP_PROJECT_ID;
   const location = process.env.GCP_LOCATION_ID || "us-central1";
   const queue = process.env.GCP_QUEUE_ID || "paypal-provisioning";
@@ -1758,33 +1759,55 @@ async function enqueueProvisioningTask(payload: {
       return { provider: "cloud-tasks", queue };
     } catch (err: any) {
       console.error(`❌ [CLOUD TASKS FAILURE] Failed to enqueue task using Google Cloud Tasks Client:`, err.message);
+      if (isProd) {
+        console.error("🚨 [FAIL CLOSED ON CLOUD TASKS] In production, local fallback is disabled to prevent serverless CPU freezing. Returning enqueue failure.");
+        return { provider: "failed", error: `Cloud Tasks enqueue failed: ${err.message}` };
+      }
       console.log("ℹ️ [CLOUD TASKS FAILOVER] Falling back to direct loopback fetch...");
     }
   } else {
+    if (isProd) {
+      console.error("🚨 [FAIL CLOSED ON CONFIG] Missing GCP_PROJECT_ID or APP_URL in production. Silent sandbox fallback rejected.");
+      return { provider: "failed", error: "Missing required GCP or APP_URL production environment variables" };
+    }
     console.log("ℹ️ [CLOUD TASKS CONFIG] GCP_PROJECT_ID or APP_URL is not set. Falling back to secure local loopback for sandbox development environment.");
   }
 
   // Local/sandbox loopback failover to keep development running perfectly
   const localUrl = `http://127.0.0.1:3000/api/webhooks/paypal/process`;
-  fetch(localUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${expectedSecret}`
-    },
-    body: JSON.stringify(payload)
-  }).catch(fetchErr => {
+  try {
+    const fetchResponse = await fetch(localUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${expectedSecret}`
+      },
+      body: JSON.stringify(payload)
+    });
+    if (!fetchResponse.ok) {
+      throw new Error(`Local loopback endpoint returned status ${fetchResponse.status}`);
+    }
+    console.log(`🔌 [LOCAL LOOPBACK DISPATCHED] Dispatched loopback to ${localUrl} successfully.`);
+    return { provider: "local-loopback", url: localUrl };
+  } catch (fetchErr: any) {
     console.error("❌ [LOCAL LOOPBACK FALLBACK FAILURE] Failed to dispatch loopback worker request:", fetchErr.message);
-  });
-
-  console.log(`🔌 [LOCAL LOOPBACK DISPATCHED] Dispatched loopback to ${localUrl} successfully.`);
-  return { provider: "local-loopback", url: localUrl };
+    return { provider: "failed", error: `Local loopback dispatch failed: ${fetchErr.message}` };
+  }
 }
 
 // 7.6 Loopback Secure Worker Endpoint for Stateless Serverless Container Environments
 app.post("/api/webhooks/paypal/process", async (req, res) => {
   try {
     const isProd = process.env.NODE_ENV === "production";
+
+    // Detect Cloud Tasks retry headers
+    const retryCountHeader = req.headers["x-cloudtasks-taskretrycount"];
+    const retryCount = retryCountHeader ? parseInt(String(retryCountHeader), 10) : 0;
+    const isQueueRetry = retryCount > 0;
+
+    if (isQueueRetry) {
+      console.log(`⏳ [QUEUE RETRY INGRESS] Ingress processed for task retry attempt #${retryCount}.`);
+    }
 
     // 1. In Production: Delegate token verification to GFE (Google Front End) network edge
     // Cloud Run is configured to "Require Authentication", so GCP IAM intercepts and verifies OIDC before it reaches us.
@@ -1809,6 +1832,18 @@ app.post("/api/webhooks/paypal/process", async (req, res) => {
 
     const { transmissionId, event, businessName, zipCode } = req.body || {};
     
+    // 3. Webhook Process Idempotency Protection to prevent overlapping duplicate executions
+    if (transmissionId) {
+      const lockCheck = await checkIdempotencyLock(transmissionId, isQueueRetry);
+      if (lockCheck.shouldIgnore) {
+        console.log(`⚠️ [WORKER IDEMPOTENCY BYPASS] Worker received a request for Transmission ID '${transmissionId}' but it is ignored: ${lockCheck.reason}`);
+        return res.status(200).json({
+          status: "ignored",
+          reason: lockCheck.reason
+        });
+      }
+    }
+
     console.log(`🛡️ [DECOUPLED LOOPBACK WORKER] Executing tenant provisioning for "${businessName}"...`);
     
     // Perform heavy Gemini call and Firestore writes while maintaining active container CPU allocation
@@ -1823,10 +1858,14 @@ app.post("/api/webhooks/paypal/process", async (req, res) => {
 
 /**
  * Checks if a transaction is a duplicate.
- * Implements a state machine with a Time-To-Live (TTL) of 5 minutes for the "processing" status.
+ * Implements a state machine with a Time-To-Live (TTL) of 15 minutes for the "processing" status.
  * Allows retry if status is "failed" or if "processing" has timed out.
+ * Overrides lock if Cloud Tasksretry header is detected to prevent fast-fail deadlocks.
  */
-async function checkIdempotencyLock(transmissionId: string): Promise<{ shouldIgnore: boolean; reason?: string }> {
+async function checkIdempotencyLock(
+  transmissionId: string,
+  isQueueRetry: boolean = false
+): Promise<{ shouldIgnore: boolean; reason?: string }> {
   try {
     const txRef = doc(db, "paypal_transactions", transmissionId);
     const txDoc = await getDoc(txRef);
@@ -1850,6 +1889,11 @@ async function checkIdempotencyLock(transmissionId: string): Promise<{ shouldIgn
     }
     
     if (status === "processing") {
+      if (isQueueRetry) {
+        console.warn(`⚠️ [QUEUE RETRY OVERRIDE] Cloud Tasks retry detected for transmission '${transmissionId}'. Overriding active 'processing' lock to permit task recovery.`);
+        return { shouldIgnore: false };
+      }
+
       const queuedAtStr = data?.queuedAt;
       if (!queuedAtStr) {
         return { shouldIgnore: false };
@@ -1990,6 +2034,28 @@ app.post("/api/webhooks/paypal", async (req, res) => {
         zipCode
       });
 
+      if (queueDispatch.provider === "failed") {
+        console.error(`🚨 [DEAD-LETTER ALERT] Secure Webhook Enqueue Failed for Transmission ID '${transmissionId}'! Error: ${queueDispatch.error}`);
+        console.warn(`🔒 [MONITORED RECONCILIATION REQUIRED] Transaction marked for manual review. Payment is SECURED, provisioning paused.`);
+        if (transmissionId) {
+          try {
+            await setDoc(doc(db, "paypal_transactions", String(transmissionId)), {
+              status: "pending_reconciliation",
+              error: queueDispatch.error,
+              failedAt: new Date().toISOString()
+            }, { merge: true });
+          } catch (lockErr: any) {
+            console.error("Failed to write manual reconciliation status to database:", lockErr.message);
+          }
+        }
+        return res.status(202).json({
+          status: "pending_reconciliation",
+          message: "Payment webhook validated. Provisioning task enqueue failed; transaction queued for manual reconciliation.",
+          transmissionId,
+          dispatch: queueDispatch
+        });
+      }
+
       console.log(`[PAYPAL WEBHOOK QUEUED] Decoupled provisioning dispatched successfully via ${queueDispatch.provider} for "${businessName}". Returning immediate 200 OK.`);
 
       return res.status(200).json({
@@ -2116,6 +2182,27 @@ if (process.env.NODE_ENV !== "production") {
           businessName,
           zipCode
         });
+
+        if (queueDispatch.provider === "failed") {
+          console.error(`🚨 [DEAD-LETTER ALERT] Mock Webhook Enqueue Failed for Transmission ID '${transmissionId}'! Error: ${queueDispatch.error}`);
+          if (transmissionId) {
+            try {
+              await setDoc(doc(db, "paypal_transactions", String(transmissionId)), {
+                status: "pending_reconciliation",
+                error: queueDispatch.error,
+                failedAt: new Date().toISOString()
+              }, { merge: true });
+            } catch (lockErr: any) {
+              console.error("Failed to write mock manual reconciliation status to database:", lockErr.message);
+            }
+          }
+          return res.status(202).json({
+            status: "pending_reconciliation",
+            message: "Simulated tenant background provisioning failed to enqueue. Queued for manual reconciliation.",
+            transmissionId,
+            dispatch: queueDispatch
+          });
+        }
 
         console.log(`[MOCK PAYPAL WEBHOOK QUEUED] Decoupled mock background provisioning dispatched via ${queueDispatch.provider} for "${businessName}". Returning immediate 200 OK.`);
 
