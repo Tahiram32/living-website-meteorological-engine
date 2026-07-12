@@ -15,6 +15,9 @@ import { OAuth2Client } from "google-auth-library";
 import { initializeApp, getApps, getApp, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { executeMeteorologicalSync, executeSingleClientSyncTask } from "./meteorological-sync-engine";
+import { Resend } from "resend";
+import { ValueReceiptEmail } from "./src/emails/ValueReceiptEmail";
+import React from 'react';
 
 dotenv.config();
 
@@ -53,7 +56,13 @@ if (isProduction && !isSandboxEnv) {
   const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
   if (serviceAccountKey && serviceAccountKey.trim() !== "") {
     try {
-      const serviceAccount = JSON.parse(serviceAccountKey);
+      let cleanedKey = serviceAccountKey.trim();
+      const firstBrace = cleanedKey.indexOf('{');
+      const lastBrace = cleanedKey.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1) {
+        cleanedKey = cleanedKey.substring(firstBrace, lastBrace + 1);
+      }
+      const serviceAccount = JSON.parse(cleanedKey);
       
       // Strict schema validation to prevent synchronous boot crashing on malformed or missing fields in dev
       if (!serviceAccount || typeof serviceAccount !== "object") {
@@ -970,11 +979,8 @@ app.post("/api/pipeline", requireRole(["gateway", "unified"]), async (req, res) 
     }
   };
 
-  // Return immediately to avoid blocking client
-  res.json({ runId, message: "Pipeline started sequentially in background." });
-
-  // Background Process
-  (async () => {
+  // Background Process / Synchronous execution for Cloud Tasks
+  try {
     await addLog("info", `Starting Webmaster Autonomous Weather-Pipeline for city: ${city}`);
     await addLog("info", `Identified ${matchingClients.length} registered multi-tenant domain(s) in Firestore.`);
 
@@ -1111,23 +1117,43 @@ app.post("/api/pipeline", requireRole(["gateway", "unified"]), async (req, res) 
             },
             required: ["heroTitle", "heroSubtitle", "alertBanner", "seoHeading", "seoArticle", "promotions", "cacheTags"]
           };
-
-          const result = await ai.models.generateContent({
-            model: "gemini-3.5-flash",
-            contents: prompt,
-            config: {
-              responseMimeType: "application/json",
-              responseSchema: responseSchema,
-              temperature: 0.7,
-            },
-          });
-
-          const rawText = result.text;
-          if (!rawText) throw new Error("Received empty content response from Gemini.");
-          
-          generatedCopy = JSON.parse(rawText.trim());
-          await addLog("success", `Gemini response schema validated successfully. Token consumption complete.`);
-        } else {
+          try {
+            const result = await ai.models.generateContent({
+              model: "gemini-3.5-flash",
+              contents: prompt,
+              config: {
+                responseMimeType: "application/json",
+                responseSchema: responseSchema,
+                temperature: 0.7,
+              },
+            });
+            const rawText = result.text;
+            if (!rawText) throw new Error("Received empty content response from Gemini.");
+            
+            generatedCopy = JSON.parse(rawText.trim());
+            await addLog("success", `Gemini response schema validated successfully. Token consumption complete.`);
+          } catch (geminiErr: any) {
+            const errStr = geminiErr.message || JSON.stringify(geminiErr);
+            const isTransient = geminiErr.status === 429 || geminiErr.status === 503 || geminiErr.code === 503 || geminiErr.status === "UNAVAILABLE" || geminiErr.error?.code === 503 || geminiErr.error?.status === "UNAVAILABLE" || geminiErr.error?.code === 429;
+            
+            if (isTransient) {
+              let delaySeconds = 24;
+              const retryMatch = errStr.match(/retry in ([\\d\\.]+)s/);
+              if (retryMatch && retryMatch[1]) {
+                delaySeconds = Math.ceil(parseFloat(retryMatch[1])) + 2;
+              }
+              const transientErr: any = new Error(errStr);
+              transientErr.isTransient = true;
+              transientErr.retryDelay = delaySeconds;
+              throw transientErr;
+            } else {
+              await addLog("warn", `[GENERATOR FALLBACK] Gemini generation unavailable, falling back to deterministic sandbox resolver: ${errStr}`);
+            }
+          }
+        } 
+        
+        if (!hasRealApiKey || !generatedCopy) {
+        
           // Robust Sandbox Mode Template Builder
           await addLog("warn", `Operating in local sandbox mode. Instantiating high-fidelity template generator.`);
           
@@ -1233,6 +1259,10 @@ app.post("/api/pipeline", requireRole(["gateway", "unified"]), async (req, res) 
         }
 
       } catch (clientErr: any) {
+        if (clientErr.isTransient) {
+          await addLog("warn", `[PIPELINE YIELD] Transient API error detected. Aborting sequence and passing backoff back to Cloud Tasks (${clientErr.retryDelay}s).`);
+          throw clientErr;
+        }
         await addLog("error", `[TASK CRITICAL FAIL] Uncaught failure processing tenant '${client.domain}': ${clientErr.message || clientErr}`);
         newRun.failedClients++;
       }
@@ -1245,7 +1275,17 @@ app.post("/api/pipeline", requireRole(["gateway", "unified"]), async (req, res) 
     newRun.completedAt = new Date().toISOString();
     await setDoc(runRef, newRun);
     await addLog("success", `Autonomous Weather-Pipeline finalized. Output: ${newRun.successfulClients} success, ${newRun.failedClients} failures, ${newRun.totalClients} total.`);
-  })();
+    
+    return res.status(200).json({ runId, message: "Pipeline finished successfully." });
+  } catch (err: any) {
+    if (err.isTransient) {
+      return res.status(429).set('Retry-After', String(err.retryDelay)).json({
+        error: "Rate Limit Exceeded. Triggering Cloud Tasks Exponential Backoff.",
+        delay: err.retryDelay
+      });
+    }
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // Endpoint for Edge Worker Fallback to bypass eventual consistency
@@ -1665,7 +1705,12 @@ async function generateTenantProfileAndBaseline(rawBusinessName: string, zipCode
         profile = JSON.parse(result.text.trim());
       }
     } catch (err: any) {
-      console.log("ℹ️ [GENERATOR FALLBACK] Gemini onboarding generation unavailable (quota/network), falling back to deterministic sandbox resolver.");
+      const isTransient = err.status === 429 || err.status === 503 || err.code === 503 || err.status === "UNAVAILABLE" || err.error?.code === 503 || err.error?.status === "UNAVAILABLE" || err.error?.code === 429;
+      if (isTransient) {
+        console.warn(`⚠️ [TRANSIENT BACKOFF] Upstream load detected during provisioning for ${businessName}. Throwing to trigger Cloud Tasks backoff.`);
+        throw err;
+      }
+      console.log("ℹ️ [GENERATOR FALLBACK] Gemini onboarding generation unavailable (permanent error), falling back to deterministic sandbox resolver.");
     }
   }
   
@@ -1780,7 +1825,7 @@ async function generateTenantProfileAndBaseline(rawBusinessName: string, zipCode
 }
 
 // 7.5 Decoupled Background Tenant Provisioning Worker
-async function runBackgroundTenantProvisioning(transmissionId: string | undefined, event: any, businessName: string, zipCode: string, tier: string = "ai-adaptive") {
+async function runBackgroundTenantProvisioning(transmissionId: string | undefined, event: any, businessName: string, zipCode: string, tier: string = "ai-adaptive", customerEmail?: string) {
   console.log(`🛡️ [BACKGROUND WORKER] Starting asynchronous tenant generation for: "${businessName}" (${zipCode})...`);
   
   if (transmissionId) {
@@ -1825,19 +1870,57 @@ async function runBackgroundTenantProvisioning(transmissionId: string | undefine
       }, { merge: true });
       console.log(`🛡️ [BACKGROUND WORKER SUCCESS] Transmission ID '${transmissionId}' completed. Tenant domain: ${domain}`);
     }
+
+    // Fire the Value Receipt via Resend
+    if (customerEmail && process.env.RESEND_API_KEY) {
+      try {
+        const resend = new Resend(process.env.RESEND_API_KEY);
+        const activeAction = `Automatically pinned the "Weather-Optimized - Priority Service" banner to your homepage to capture incoming local traffic.`;
+        
+        await resend.emails.send({
+          from: 'Webmaster <engine@yourdomain.com>',
+          to: customerEmail,
+          subject: 'Your Autonomous Website is Live.',
+          react: ValueReceiptEmail({ 
+            businessName: businessName, 
+            siteUrl: `https://${domain}`,
+            weatherContext: "Live Local Environment Sync Active",
+            activeAction: activeAction
+          })
+        });
+        console.log(`✉️ [VALUE RECEIPT] Sent onboarding email to ${customerEmail}`);
+      } catch (emailErr: any) {
+        console.error(`❌ [VALUE RECEIPT ERROR] Failed to send email to ${customerEmail}:`, emailErr);
+      }
+    } else if (customerEmail) {
+      console.warn(`⚠️ [VALUE RECEIPT DISABLED] No RESEND_API_KEY configured. Did not send onboarding email to ${customerEmail}`);
+    }
+
   } catch (err: any) {
     console.error(`❌ [BACKGROUND WORKER FAILURE] Failed to provision tenant for "${businessName}":`, err);
+    
+    const isTransient = err.status === 429 || err.status === 503 || err.code === 503 || err.status === "UNAVAILABLE" || err.error?.code === 503 || err.error?.status === "UNAVAILABLE" || err.error?.code === 429;
+    
+    if (isTransient) {
+      // DO NOT mark the database as failed. Throw the error to be caught by the Express handler
+      // which will return a 503 to Cloud Tasks to trigger exponential backoff.
+      throw err;
+    }
+    
+    // For permanent errors, fail-closed cleanly
     if (transmissionId) {
       try {
         await setDoc(doc(db, "paypal_transactions", String(transmissionId)), {
           failedAt: new Date().toISOString(),
           error: err.message,
-          status: "failed"
+          status: "pending_reconciliation"
         }, { merge: true });
       } catch (e: any) {
         console.error("Failed to write failure log to Firestore:", e.message);
       }
     }
+    
+    throw err;
   }
 }
 
@@ -1848,6 +1931,7 @@ async function enqueueProvisioningTask(payload: {
   businessName: string;
   zipCode: string;
   tier: string;
+  customerEmail?: string;
 }) {
   const isProd = process.env.NODE_ENV === "production";
   const projectId = process.env.GCP_PROJECT_ID;
@@ -2013,7 +2097,7 @@ app.post("/api/webhooks/paypal/process", requireRole(["worker", "unified"]), ver
       console.log(`⏳ [QUEUE RETRY INGRESS] Ingress processed for authentic task retry attempt #${retryCount}.`);
     }
 
-    const { transmissionId, event, businessName, zipCode } = req.body || {};
+    const { transmissionId, event, businessName, zipCode, customerEmail } = req.body || {};
     
     // 3. Webhook Process Idempotency Protection to prevent overlapping duplicate executions
     if (transmissionId) {
@@ -2031,12 +2115,27 @@ app.post("/api/webhooks/paypal/process", requireRole(["worker", "unified"]), ver
     
     // Perform heavy Gemini call and Firestore writes while maintaining active container CPU allocation
     const tier = req.body.tier || "ai-adaptive";
-    await runBackgroundTenantProvisioning(transmissionId, event, businessName, zipCode, tier);
+    await runBackgroundTenantProvisioning(transmissionId, event, businessName, zipCode, tier, customerEmail);
     
     return res.status(200).json({ status: "success", businessName });
   } catch (err: any) {
-    console.error("❌ [DECOUPLED LOOPBACK WORKER ERROR]:", err.message);
-    return res.status(500).json({ error: err.message });
+    console.error(`🚨 [GEMINI API FAILURE] Processing failed for ${req.body.businessName}`, err);
+    
+    // 1. Inspect if the error is an upstream rate-limit or demand spike (429 or 503)
+    const isTransient = err.status === 429 || err.status === 503 || err.code === 503 || err.status === "UNAVAILABLE" || err.error?.code === 503 || err.error?.status === "UNAVAILABLE" || err.error?.code === 429;
+    
+    if (isTransient) {
+      // 2. DO NOT mark the database as failed. Keep the door open for the next queue retry.
+      console.warn(`⚠️ [TRANSIENT BACKOFF] Upstream load detected. Signaling Cloud Tasks queue to execute backoff.`);
+      
+      // 3. Return a clean 429/503 to Cloud Tasks to trigger native exponential backoff
+      return res.status(503).json({
+        error: "Upstream AI model unavailable, retrying payload execution dynamically."
+      });
+    }
+
+    // 4. Permanent error handled in runBackgroundTenantProvisioning
+    return res.status(200).json({ error: "Permanent payload error caught. Deflected to Dead-Letter state." });
   }
 });
 
@@ -2186,12 +2285,16 @@ app.post("/api/webhooks/paypal", requireRole(["gateway", "unified"]), verifyPayP
         zipCode = "75201";
       }
 
+      const customerEmail = resource.subscriber?.email_address || resource.payer?.email_address || "";
+
       // Dispatch task via Google Cloud Tasks (with seamless local loopback fallback)
       const queueDispatch = await enqueueProvisioningTask({
         transmissionId,
         event,
         businessName,
-        zipCode
+        zipCode,
+        tier,
+        customerEmail
       });
 
       if (queueDispatch.provider === "failed") {
@@ -2320,13 +2423,16 @@ if (process.env.NODE_ENV !== "production") {
 
 
 
+        const customerEmail = resource.subscriber?.email_address || resource.payer?.email_address || "";
+
         // Dispatch task via Google Cloud Tasks (with seamless local loopback fallback)
         const queueDispatch = await enqueueProvisioningTask({
           transmissionId,
           event,
           businessName,
           zipCode,
-          tier
+          tier,
+          customerEmail
         });
 
         if (queueDispatch.provider === "failed") {

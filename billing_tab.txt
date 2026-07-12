@@ -1,0 +1,301 @@
+                    ))}
+                  </tbody>
+                </table>
+                  </div>
+                )}
+
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: PayPal SaaS Onboarding & Subscription Portal */}
+          {activeTab === "billing" && (
+            <div className="flex flex-col gap-6">
+              {/* Concept Block */}
+              <div className="bg-white border border-slate-300 shadow-sm p-6">
+                <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-200">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse"></span>
+                    <h3 className="font-sans text-xs font-bold tracking-widest text-slate-800">
+                      SaaS Billing Integration
+                    </h3>
+                  </div>
+                  <span className="font-sans text-xs text-blue-600 bg-blue-600/10 px-2 py-0.5 border border-blue-600/20 tracking-wider">
+                    Secure Gateway Connected
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 leading-relaxed mb-4">
+                  Our service platform is fully integrated with PayPal for automated client registration. 
+                  Rather than manual setup, business owners subscribe directly via PayPal buttons on your sales page. 
+                  Our secure webhook handler at <code className="text-blue-600 font-sans">/api/webhooks/paypal</code> immediately 
+                  receives the subscription details and automatically provisions their dynamic website and theme.
+                </p>
+
+                <div className="bg-slate-50 p-4 border border-slate-200 shadow-sm font-sans text-xs leading-relaxed text-slate-500">
+                  <div className="text-slate-500 mb-1 font-bold">Automated Provisioning Flow:</div>
+                  <div>[Customer Checkout] &mdash;(PayPal Smart Button)&mdash;&gt; [PayPal API Gateway]</div>
+                  <div className="pl-44">&lsquo;&mdash;&mdash;&mdash;(Secure Webhook POST) &mdash;&mdash;&mdash;&gt; [/api/webhooks/paypal]</div>
+                  <div className="pl-96">&lsquo;&mdash;&mdash;&mdash;&gt; [Client Website Dashboard Provisioned]</div>
+                </div>
+              </div>
+
+              {/* Form & Sandbox Terminal */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                {/* Simulation Form */}
+                <div className="md:col-span-7 bg-white border border-slate-300 shadow-sm p-6 flex flex-col gap-5">
+                  <div>
+                    <h4 className="font-sans text-xs font-bold text-slate-800 mb-1">
+                      1. Client Checkout Details
+                    </h4>
+                    <p className="text-xs text-slate-500">
+                      Enter the client's business details to test our checkout. The system will use PayPal's secure payload pass-through to register the domain dynamically upon payment.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5 col-span-2 md:col-span-1">
+                      <label className="text-xs font-sans text-slate-500">Business Name</label>
+                      <input
+                        type="text"
+                        value={checkoutName}
+                        onChange={(e) => setCheckoutName(e.target.value)}
+                        placeholder="e.g. Gulf Stream AC & Heating"
+                        className="w-full bg-white border border-slate-300 shadow-sm rounded-md px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-sans"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5 col-span-2 md:col-span-1">
+                      <label className="text-xs font-sans text-slate-500">Checkout ZIP Code</label>
+                      <input
+                        type="text"
+                        value={checkoutZipCode}
+                        onChange={(e) => setCheckoutZipCode(e.target.value)}
+                        placeholder="e.g. 75201"
+                        className="w-full bg-white border border-slate-300 shadow-sm rounded-md px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-sans"
+                      />
+                    </div>
+                    <div className="col-span-2 bg-slate-50 p-3 border border-slate-200 rounded">
+                      <div className="flex items-center gap-1.5 text-xs font-sans text-blue-600 font-bold mb-1">
+                        <span className="inline-block w-1.5 h-1.5 bg-blue-600 rounded-full animate-pulse"></span>
+                        AI-Powered Client Setup Active
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        To simplify onboarding, only Name and ZIP are required. The system automatically launches Gemini to resolve vertical (e.g. Roofing, Plumbing), map territory cities, design visual themes, and define dynamic meteorological triggers.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-slate-200 my-2"></div>
+
+                  {/* PayPal Buttons */}
+                  <div className="flex flex-col gap-4">
+                    <div className="flex justify-between items-center text-xs mt-2">
+                      <span className="font-sans text-xs text-slate-500">Product ID: LIVING-OS-ADAPTIVE</span>
+                      <span className="font-bold text-slate-700 font-sans">$10 / month</span>
+                    </div>
+
+                    <PayPalScriptProvider options={{ clientId: import.meta.env.VITE_PAYPAL_CLIENT_ID || "test", components: "buttons", currency: "USD" }}>
+                      <PayPalButtons 
+                        style={{ layout: "vertical" }}
+                        disabled={isSubmittingCheckout || !checkoutName || !checkoutZipCode}
+                        createOrder={(data, actions) => {
+                          return actions.order.create({
+                            intent: "CAPTURE",
+                            purchase_units: [
+                              {
+                                amount: {
+                                  value: "10.00",
+                                  currency_code: "USD"
+                                },
+                                description: `Living OS Subscription - AI-Adaptive`,
+                                custom_id: JSON.stringify({
+                                  businessName: checkoutName,
+                                  zipCode: checkoutZipCode,
+                                  tier: "ai-adaptive"
+                                })
+                              }
+                            ]
+                          });
+                        }}
+                        onApprove={async (data, actions) => {
+                          if (!actions.order) return;
+                          
+                          setIsSubmittingCheckout(true);
+                          setCheckoutStep(1); // Verifying payment...
+                          setCheckoutLog([`[PAYPAL SDK] Initializing payment session...`]);
+
+                          try {
+                            const details = await actions.order.capture();
+                            setCheckoutLog(prev => [...prev, `[PAYPAL SDK] Customer approved payment. Transaction ID: ${details.id}`]);
+                            setCheckoutStep(2); // Analyzing territory data...
+                            
+                            // Note: In a real production flow, your backend webhook (/api/webhooks/paypal) 
+                            // would receive the event and asynchronously provision the client.
+                            // To simulate that same async backend experience here on the frontend quickly:
+                            const mockTxId = details.id;
+                            const mockTime = new Date().toISOString();
+                            const mockSig = `sig_live_${Math.random().toString(36).substring(2, 24)}`;
+                            const mockCertUrl = "https://api.paypal.com/v1/certs/mock-cert-bundle.pem";
+                      
+                            const wait = (ms: number) => new Promise(res => setTimeout(res, ms));
+                            await wait(600);
+                            setCheckoutStep(3); // Generating dynamic layout...
+                      
+                            const res = await fetch("/api/webhooks/mock-paypal", {
+                              method: "POST",
+                              headers: { 
+                                "Content-Type": "application/json",
+                                "paypal-transmission-id": mockTxId,
+                                "paypal-transmission-time": mockTime,
+                                "paypal-transmission-sig": mockSig,
+                                "paypal-cert-url": mockCertUrl,
+                                "paypal-auth-algo": "SHA256withRSA"
+                              },
+                              body: JSON.stringify({
+                                event_type: "CHECKOUT.ORDER.APPROVED",
+                                resource: {
+                                  custom_id: JSON.stringify({
+                                    businessName: checkoutName,
+                                    zipCode: checkoutZipCode
+                                  })
+                                }
+                              })
+                            });
+                      
+                            if (!res.ok) {
+                              throw new Error(`Server returned HTTP Status ${res.status}`);
+                            }
+                      
+                            setCheckoutStep(4); // Deploying to edge...
+                            await wait(1000);
+                      
+                            setCheckoutStep(5); // Complete!
+                            setTimeout(() => setActiveTab("tenants"), 2000);
+                          } catch (err: any) {
+                            setCheckoutLog(prev => [...prev, `[ERROR] ${err.message || err.toString()}`]);
+                            setCheckoutStep(-1);
+                          } finally {
+                            setIsSubmittingCheckout(false);
+                          }
+                        }}
+                        onError={(err) => {
+                          setCheckoutLog(prev => [...prev, `[ERROR] PayPal Error: ${err.toString()}`]);
+                          setCheckoutStep(-1);
+                        }}
+                      />
+                    </PayPalScriptProvider>
+                    
+                    <button
+                      onClick={() => handlePayPalSubscriptionSimulate()}
+                      disabled={isSubmittingCheckout || !checkoutName || !checkoutZipCode}
+                      className="mt-2 text-[10px] text-slate-400 hover:text-slate-600 underline text-center w-full"
+                    >
+                      (Or click here to run webhook simulation directly without payment)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Live Output Console */}
+                <div className="md:col-span-5 flex flex-col gap-4">
+                  <div className="bg-white border border-slate-300 shadow-sm p-5 flex-1 flex flex-col gap-4 min-h-[350px]">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+                      <span className="font-sans text-xs font-bold text-slate-500 uppercase">
+                        Billing Integration Stream
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
+                        <span className="font-sans text-[10px] text-blue-600">Ready</span>
+                      </div>
+                    </div>
+
+                    {/* Logs Screen */}
+                    <div className="flex-1 overflow-y-auto font-sans text-xs leading-relaxed flex flex-col gap-0 max-h-[250px] scrollbar-thin">
+                      {checkoutStep === 0 && checkoutLog.length === 0 ? (
+                        <div className="text-slate-500 italic">
+                          No active checkout session. Fill out the business details on the left and click "PayPal Subscribe" to simulate a live secure subscription purchase flow.
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-6 py-2">
+                          {/* Step 1 */}
+                          <div className={`flex items-start gap-4 transition-opacity duration-500 ${checkoutStep >= 1 || checkoutStep === -1 ? 'opacity-100' : 'opacity-0 hidden'}`}>
+                            <div className="mt-0.5 relative z-10 flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-600 shrink-0">
+                              {checkoutStep > 1 || checkoutStep === -1 ? <Check className="w-3 h-3" /> : <RefreshCw className="w-3 h-3 animate-spin" />}
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <span className={`font-semibold ${checkoutStep >= 1 ? 'text-slate-900' : 'text-slate-400'}`}>Verifying payment via PayPal</span>
+                              {checkoutStep === 1 && <span className="text-slate-500 text-[11px]">Contacting secure gateway...</span>}
+                            </div>
+                          </div>
+                          
+                          {/* Step 2 */}
+                          <div className={`flex items-start gap-4 transition-opacity duration-500 ${checkoutStep >= 2 || checkoutStep === -1 ? 'opacity-100' : 'opacity-0 hidden'}`}>
+                            <div className="mt-0.5 relative z-10 flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-600 shrink-0">
+                              {checkoutStep > 2 || checkoutStep === -1 ? <Check className="w-3 h-3" /> : <RefreshCw className="w-3 h-3 animate-spin" />}
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <span className={`font-semibold ${checkoutStep >= 2 ? 'text-slate-900' : 'text-slate-400'}`}>Analyzing territory data</span>
+                              {checkoutStep === 2 && <span className="text-slate-500 text-[11px]">Identifying vertical mapping and weather conditions...</span>}
+                            </div>
+                          </div>
+
+                          {/* Step 3 */}
+                          <div className={`flex items-start gap-4 transition-opacity duration-500 ${checkoutStep >= 3 || checkoutStep === -1 ? 'opacity-100' : 'opacity-0 hidden'}`}>
+                            <div className="mt-0.5 relative z-10 flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-600 shrink-0">
+                              {checkoutStep > 3 || checkoutStep === -1 ? <Check className="w-3 h-3" /> : <RefreshCw className="w-3 h-3 animate-spin" />}
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <span className={`font-semibold ${checkoutStep >= 3 ? 'text-slate-900' : 'text-slate-400'}`}>Generating dynamic layout</span>
+                              {checkoutStep === 3 && <span className="text-slate-500 text-[11px]">Orchestrating AI models for copy & assets...</span>}
+                            </div>
+                          </div>
+
+                          {/* Step 4 */}
+                          <div className={`flex items-start gap-4 transition-opacity duration-500 ${checkoutStep >= 4 || checkoutStep === -1 ? 'opacity-100' : 'opacity-0 hidden'}`}>
+                            <div className="mt-0.5 relative z-10 flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-600 shrink-0">
+                              {checkoutStep > 4 || checkoutStep === 5 ? <Check className="w-3 h-3" /> : (checkoutStep === 4 ? <RefreshCw className="w-3 h-3 animate-spin" /> : <div className="w-2 h-2 rounded-full bg-slate-300"></div>)}
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <span className={`font-semibold ${checkoutStep >= 4 ? 'text-slate-900' : 'text-slate-400'}`}>Deploying to edge</span>
+                              {checkoutStep === 4 && <span className="text-slate-500 text-[11px]">Provisioning client dashboard...</span>}
+                              {checkoutStep === 5 && <span className="text-emerald-600 font-semibold text-[11px]">Dashboard successfully provisioned! Redirecting...</span>}
+                            </div>
+                          </div>
+                          
+                          {/* Error State */}
+                          {checkoutStep === -1 && (
+                            <div className="mt-2 p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-start gap-2">
+                              <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                              <div className="text-rose-600 font-sans text-xs">
+                                <strong>Checkout Failed:</strong> {checkoutLog[checkoutLog.length - 1]?.replace('[ERROR] ', '')}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Webhook target info */}
+                    <div className="bg-slate-50 p-3 border border-slate-850 flex items-center gap-3 text-xs">
+                      <div className="text-slate-500">⚡</div>
+                      <div>
+                        <span className="text-xs font-sans text-slate-500 block leading-none">
+                          Webhook Listener
+                        </span>
+                        <span className="font-sans text-xs text-blue-600">
+                          POST /api/webhooks/paypal
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+
+        {/* Right Side: Interactive "Active Copwriting Preview" Card */}
+        <div className="lg:col-span-4 flex flex-col gap-6">
+          <div className="bg-white border border-slate-300 shadow-sm p-5 sticky top-24 flex flex-col gap-4 rounded-lg">
+            
+            {/* Header */}
+            <div>
