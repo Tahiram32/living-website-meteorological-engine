@@ -49,6 +49,7 @@ export default function App() {
   const [newClientIsr, setNewClientIsr] = useState("");
   const [newClientSecret, setNewClientSecret] = useState("");
   const [isAdding, setIsAdding] = useState(false);
+  const [pendingClients, setPendingClients] = useState<HVACClient[]>([]);
   const [submitError, setSubmitError] = useState("");
 
   // PayPal Checkout Form States
@@ -59,6 +60,7 @@ export default function App() {
   const [checkoutPhone, setCheckoutPhone] = useState("(214) 555-0199");
   const [isSubmittingCheckout, setIsSubmittingCheckout] = useState(false);
   const [checkoutLog, setCheckoutLog] = useState<string[]>([]);
+  const [checkoutStep, setCheckoutStep] = useState<number>(0);
 
   // UI state
   const [copiedIndex, setCopiedIndex] = useState<string | null>(null);
@@ -137,6 +139,18 @@ export default function App() {
     }
 
     try {
+      const tempClient: HVACClient = {
+        domain: newClientDomain,
+        businessName: newClientName,
+        city: newClientCity,
+        phone: newClientPhone,
+        isrUrl: newClientIsr || undefined,
+        isrSecret: newClientSecret || undefined,
+        createdAt: new Date().toISOString()
+      };
+      setPendingClients(prev => [...prev, tempClient]);
+      setIsAdding(false);
+
       const payload = {
         domain: newClientDomain,
         businessName: newClientName,
@@ -153,6 +167,7 @@ export default function App() {
       });
 
       if (!res.ok) {
+        setPendingClients(prev => prev.filter(p => p.domain !== tempClient.domain));
         const errJson = await res.json();
         throw new Error(errJson.error || "Failed to save client.");
       }
@@ -172,34 +187,23 @@ export default function App() {
   // Handle Simulated PayPal Checkout Webhook trigger
   const handlePayPalSubscriptionSimulate = async () => {
     setIsSubmittingCheckout(true);
+    setCheckoutStep(1); // Verifying payment...
     setCheckoutLog([`[PAYPAL SDK] Initializing payment session...`]);
 
-    const addLogLine = (line: string, delay: number) => {
-      return new Promise<void>((resolve) => {
-        setTimeout(() => {
-          setCheckoutLog((prev) => [...prev, line]);
-          resolve();
-        }, delay);
-      });
-    };
+    const wait = (ms: number) => new Promise(res => setTimeout(res, ms));
 
     try {
-      await addLogLine(`[PAYPAL SDK] User authenticated successfully. Sandbox account: buyer@livinghvac.com`, 400);
-      await addLogLine(`[PAYPAL SDK] Generating secure SaaS billing plan token: BILLING-199-PLAN`, 300);
-      await addLogLine(`[PAYPAL SDK] Customer approved subscription billing terms. Token: SUB-92841-A93`, 400);
-      await addLogLine(`[PAYPAL GATEWAY] Subscription successfully approved in merchant account!`, 300);
-      await addLogLine(`[PAYPAL GATEWAY] Disbursing secure event payload (event_type: BILLING.SUBSCRIPTION.ACTIVATED)...`, 400);
-
-      // Trigger the real server-side PayPal webhook endpoint with realistic cryptographic headers!
+      await wait(800);
+      setCheckoutLog(prev => [...prev, `[PAYPAL SDK] Customer approved subscription.`]);
+      setCheckoutStep(2); // Analyzing territory data...
+      
       const mockTxId = `tx_mock_${Math.random().toString(36).substring(2, 12).toUpperCase()}`;
       const mockTime = new Date().toISOString();
       const mockSig = `sig_mock_${Math.random().toString(36).substring(2, 24)}`;
       const mockCertUrl = "https://api.paypal.com/v1/certs/mock-cert-bundle.pem";
 
-      await addLogLine(`[PAYPAL HEADERS] paypal-transmission-id: ${mockTxId}`, 150);
-      await addLogLine(`[PAYPAL HEADERS] paypal-transmission-time: ${mockTime}`, 150);
-      await addLogLine(`[PAYPAL HEADERS] paypal-transmission-sig: ${mockSig.substring(0, 16)}...`, 150);
-      await addLogLine(`[PAYPAL HEADERS] paypal-cert-url: ${mockCertUrl}`, 150);
+      await wait(600);
+      setCheckoutStep(3); // Generating dynamic layout...
 
       const res = await fetch("/api/webhooks/mock-paypal", {
         method: "POST",
@@ -226,29 +230,17 @@ export default function App() {
         throw new Error(`Server returned HTTP Status ${res.status}`);
       }
 
+      setCheckoutStep(4); // Deploying to edge...
+      await wait(1000);
+
       const data = await res.json();
-      const resolvedDomain = data.client?.domain || `${checkoutName.toLowerCase().replace(/\s+/g, "")}.livingwebsiteos.com`;
-      const resolvedVertical = data.client?.vertical || "HVAC";
-      const resolvedCity = data.client?.city || "Dallas, TX";
+      setCheckoutStep(5); // Complete!
       
-      await addLogLine(`[SERVER RESPONSE] Status: ${res.status} OK. Verification: ${JSON.stringify(data.status)}`, 300);
-      await addLogLine(`[SERVER SUCCESS] Multi-tenant document for '${resolvedDomain}' provisioned successfully!`, 400);
-      await addLogLine(`[GEMINI ENGINE] Resolved Vertical: "${resolvedVertical}"`, 200);
-      await addLogLine(`[GEMINI ENGINE] Resolved Territory City: "${resolvedCity}"`, 200);
-      await addLogLine(`[GEMINI ENGINE] Assigned Visual Theme: "${data.client?.themeColor || 'blue'}" | Icon: "${data.client?.icon || 'snowflake'}"`, 200);
-      await addLogLine(`[GEMINI ENGINE] Target Meteorological Triggers: [${(data.client?.primary_triggers || []).join(', ')}]`, 200);
-      
-      // Edge hydration logs to illustrate the solved KV propagation race condition
-      await addLogLine(`[HYBRID RESOLUTION] Triggering edge-cache validation cycle...`, 300);
-      await addLogLine(`[EDGE REPLICATION] Simulating first client request to edge domain '${resolvedDomain}'...`, 400);
-      await addLogLine(`[KV CACHE MISS] Cloudflare KV: Cache miss for '${resolvedDomain}' due to eventual consistency re-propagation latency.`, 500);
-      await addLogLine(`[EDGE RESOLUTION] Fallback Rest: Edge worker seamlessly routed query to core registrar REST API... Resolved!`, 400);
-      await addLogLine(`[EDGE REPLICATION] Site rendered synchronously at the serverless edge. Performance: 42ms (X-Edge-Fallback-Resolved: true).`, 300);
-      await addLogLine(`[EDGE HYDRATION] Background job triggered: Asynchronously hydrated Edge KV cache with client records.`, 400);
-      await addLogLine(`[KV CACHE HIT] Future client loads for '${resolvedDomain}' will serve in <10ms directly from Edge-replicated KV memory!`, 300);
-      await addLogLine(`[FIRESTORE ACTION] Real-time snapshot listener triggered. Active tenant list updated. Onboarding complete!`, 300);
+      setTimeout(() => setActiveTab("tenants"), 2000);
+
     } catch (err: any) {
-      setCheckoutLog((prev) => [...prev, `[ERROR] Failed to post checkout event: ${err.message || err}`]);
+      setCheckoutLog(prev => [...prev, `[ERROR] ${err.message}`]);
+      setCheckoutStep(-1);
     } finally {
       setIsSubmittingCheckout(false);
     }
@@ -260,6 +252,7 @@ export default function App() {
     const unsubscribe = onSnapshot(clientsQuery, (snapshot) => {
       const data = snapshot.docs.map(doc => doc.data() as HVACClient);
       setClients(data);
+      setPendingClients(prev => prev.filter(p => !data.some(d => d.domain === p.domain)));
       if (data.length > 0) {
         setSelectedClient(prev => {
           if (!prev) return data[0];
@@ -524,43 +517,43 @@ exports.weatherWebmasterPipeline = async (req, res) => {
 }`;
 
   return (
-    <div className="min-h-screen bg-[#020617] text-[#f8fafc] flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans">
       {/* 1. Global Header */}
-      <header className="border-b border-[#334155] bg-[#020617] px-6 py-4 flex items-center justify-between sticky top-0 z-50">
+      <header className="border-b border-slate-200 bg-slate-50 px-6 py-4 flex items-center justify-between sticky top-0 z-50">
         <div className="flex items-center gap-4">
-          <div className="w-8 h-8 bg-emerald-500 rounded-sm flex items-center justify-center">
-            <Cpu className="w-4 h-4 text-slate-950" />
+          <div className="w-8 h-8 bg-blue-600 rounded-md flex items-center justify-center">
+            <Cpu className="w-4 h-4 text-white" />
           </div>
-          <span className="font-bold tracking-tight text-xl text-white">
-            Living Website <span className="text-emerald-400 font-mono">Engine</span>
+          <span className="font-bold tracking-tight text-xl text-slate-900">
+            Living Website <span className="text-blue-600 font-sans">Engine</span>
           </span>
         </div>
 
         {/* Status Indicators */}
         <div className="flex gap-8 items-center">
           <div className="hidden md:flex flex-col">
-            <span className="label-mono font-semibold text-slate-400">MODE</span>
-            <span className="text-xs font-semibold text-slate-200">Production</span>
+            <span className="text-xs font-semibold tracking-wider text-slate-500">MODE</span>
+            <span className="text-xs font-semibold text-slate-800">Production</span>
           </div>
           <div className="hidden md:flex flex-col">
-            <span className="label-mono font-semibold text-slate-400">AI ASSISTANT</span>
-            <span className="text-xs font-semibold text-slate-200">Gemini 1.5 Flash</span>
+            <span className="text-xs font-semibold tracking-wider text-slate-500">AI ASSISTANT</span>
+            <span className="text-xs font-semibold text-slate-800">Gemini 1.5 Flash</span>
           </div>
           <div className="flex flex-col">
-            <span className="label-mono font-semibold text-slate-400">API STATUS</span>
+            <span className="text-xs font-semibold tracking-wider text-slate-500">API STATUS</span>
             <div className="flex items-center gap-1.5 mt-0.5">
               {hasRealApiKey ? (
-                <span className="text-[10px] bg-sky-500/10 border border-sky-500/30 rounded px-2 py-0.5 text-sky-400 font-bold uppercase">
+                <span className="text-xs bg-sky-500/10 border border-sky-500/30 rounded px-2 py-0.5 text-sky-400 font-bold uppercase">
                   Connected
                 </span>
               ) : (
-                <span className="text-[10px] bg-amber-500/10 border border-amber-500/30 rounded px-2 py-0.5 text-amber-500 font-bold uppercase">
+                <span className="text-xs bg-amber-500/10 border border-amber-500/30 rounded px-2 py-0.5 text-amber-500 font-bold uppercase">
                   Local Sandbox
                 </span>
               )}
             </div>
           </div>
-          <div className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded text-emerald-400 text-xs font-semibold">
+          <div className="px-3 py-1 bg-blue-600/10 border border-blue-600/30 rounded text-blue-600 text-xs font-semibold">
             System Online
           </div>
         </div>
@@ -571,13 +564,13 @@ exports.weatherWebmasterPipeline = async (req, res) => {
         <div className="lg:col-span-8 flex flex-col gap-6">
           
           {/* Module Selector Tabs */}
-          <div className="bg-[#020617] border border-[#334155] rounded-none p-1 flex gap-1 font-mono">
+          <div className="bg-white border border-slate-300 shadow-sm rounded-lg p-1 flex gap-1 font-sans">
             <button
               onClick={() => setActiveTab("console")}
-              className={`flex-1 py-2.5 px-4 text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-2 transition-all border ${
+              className={`flex-1 py-2.5 px-4 text-xs font-semibold tracking-wider flex items-center justify-center gap-2 transition-all border ${
                 activeTab === "console"
-                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                  : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/50"
+                  ? "bg-blue-600/10 text-blue-600 border-blue-600/30"
+                  : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-white/50"
               }`}
             >
               <Terminal className="w-4 h-4" />
@@ -585,10 +578,10 @@ exports.weatherWebmasterPipeline = async (req, res) => {
             </button>
             <button
               onClick={() => setActiveTab("tenants")}
-              className={`flex-1 py-2.5 px-4 text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-2 transition-all border ${
+              className={`flex-1 py-2.5 px-4 text-xs font-semibold tracking-wider flex items-center justify-center gap-2 transition-all border ${
                 activeTab === "tenants"
-                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                  : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/50"
+                  ? "bg-blue-600/10 text-blue-600 border-blue-600/30"
+                  : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-white/50"
               }`}
             >
               <Database className="w-4 h-4" />
@@ -596,10 +589,10 @@ exports.weatherWebmasterPipeline = async (req, res) => {
             </button>
             <button
               onClick={() => setActiveTab("billing")}
-              className={`flex-1 py-2.5 px-4 text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-2 transition-all border ${
+              className={`flex-1 py-2.5 px-4 text-xs font-semibold tracking-wider flex items-center justify-center gap-2 transition-all border ${
                 activeTab === "billing"
-                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                  : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/50"
+                  ? "bg-blue-600/10 text-blue-600 border-blue-600/30"
+                  : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-white/50"
               }`}
             >
               <Sparkles className="w-4 h-4" />
@@ -612,21 +605,21 @@ exports.weatherWebmasterPipeline = async (req, res) => {
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
               
               {/* Launcher Card - 7 cols */}
-              <div className="md:col-span-7 bg-[#020617] border border-[#334155] p-5 flex flex-col justify-between">
+              <div className="md:col-span-7 bg-white border border-slate-300 shadow-sm p-5 flex flex-col justify-between">
                 <div>
-                  <span className="label-mono font-semibold text-slate-400">Automatic Copy Optimizer</span>
-                  <h2 className="text-sm font-semibold text-slate-200 mt-1 mb-3 uppercase tracking-tight">
+                  <span className="text-xs font-semibold tracking-wider text-slate-500">Automatic Copy Optimizer</span>
+                  <h2 className="text-sm font-semibold text-slate-800 mt-1 mb-3 tracking-tight">
                     Weather-Adaptive Content Control
                   </h2>
-                  <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+                  <p className="text-xs text-slate-500 mb-4 leading-relaxed">
                     Automatically tailor your landing pages to live weather conditions. Run a test for a single city or sync your entire fleet of clients to update their sites based on current temperatures, humidity, and storm events.
                   </p>
                 </div>
 
-                <div className="flex flex-col gap-5 border-t border-slate-800 pt-4">
+                <div className="flex flex-col gap-5 border-t border-slate-200 pt-4">
                   {/* Action Group 1: Single City */}
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 font-mono tracking-wider block mb-2">
+                    <span className="text-xs font-bold text-slate-500 font-sans tracking-wider block mb-2">
                       1. Run a Single-City Test
                     </span>
                     <div className="flex flex-col sm:flex-row gap-2">
@@ -636,7 +629,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                           setSelectedCity(e.target.value);
                           if (e.target.value !== "custom") setCustomCity("");
                         }}
-                        className="w-full sm:flex-1 bg-[#020617] border border-[#334155] px-4 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-mono rounded-none min-w-0"
+                        className="w-full sm:flex-1 bg-white border border-slate-300 shadow-sm px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-sans rounded-lg min-w-0"
                         disabled={isPolling}
                       >
                         <option value="Dallas">Dallas, TX</option>
@@ -652,7 +645,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                           placeholder="E.g., Las Vegas"
                           value={customCity}
                           onChange={(e) => setCustomCity(e.target.value)}
-                          className="w-full sm:flex-1 bg-[#020617] border border-[#334155] px-4 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-mono rounded-none"
+                          className="w-full sm:flex-1 bg-white border border-slate-300 shadow-sm px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-sans rounded-lg"
                           disabled={isPolling}
                         />
                       )}
@@ -660,16 +653,16 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                       <button
                         onClick={() => triggerPipeline(selectedCity === "custom" ? customCity : selectedCity)}
                         disabled={isPolling || (selectedCity === "custom" && !customCity)}
-                        className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-bold font-mono text-[10px] px-4 py-2 rounded-none flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed transition-all uppercase tracking-wider whitespace-nowrap"
+                        className="w-full sm:w-auto bg-blue-600 hover:bg-blue-600 disabled:bg-white disabled:text-slate-500 text-white font-bold font-sans text-xs px-4 py-2 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed transition-all tracking-wider whitespace-nowrap"
                       >
                         {isPolling ? (
                           <>
-                            <RefreshCw className="w-3 h-3 animate-spin text-slate-950" />
+                            <RefreshCw className="w-3 h-3 animate-spin text-white" />
                             Tuning...
                           </>
                         ) : (
                           <>
-                            <Play className="w-3 h-3 fill-current text-slate-950" />
+                            <Play className="w-3 h-3 fill-current text-white" />
                             Run Weather Sync
                           </>
                         )}
@@ -678,15 +671,15 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                   </div>
 
                   {/* Action Group 2: Full Fleet Weather Cron */}
-                  <div className="border-t border-slate-800/60 pt-4">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 font-mono tracking-wider block mb-2">
+                  <div className="border-t border-slate-200/60 pt-4">
+                    <span className="text-xs font-bold text-slate-500 font-sans tracking-wider block mb-2">
                       2. Sync All Clients (Fleet-wide)
                     </span>
                     <div className="flex flex-col sm:flex-row gap-2">
                       <select
                         value={queueMode}
                         onChange={(e) => setQueueMode(e.target.value as any)}
-                        className="w-full sm:flex-1 bg-[#020617] border border-[#334155] px-4 py-2 text-xs text-slate-200 focus:outline-none focus:border-sky-500 font-mono rounded-none min-w-0"
+                        className="w-full sm:flex-1 bg-white border border-slate-300 shadow-sm px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-sky-500 font-sans rounded-lg min-w-0"
                         disabled={isPolling}
                       >
                         <option value="simulated">Local Simulated Queue (100% Free - No GCP Setup)</option>
@@ -698,10 +691,10 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                       <button
                         onClick={() => triggerMeteorologicalSync(queueMode)}
                         disabled={isPolling || queueMode === "github-actions"}
-                        className={`w-full sm:w-auto font-bold font-mono text-[10px] px-4 py-2 rounded-none flex items-center justify-center gap-1.5 transition-all uppercase tracking-wider whitespace-nowrap ${
+                        className={`w-full sm:w-auto font-bold font-sans text-xs px-4 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all tracking-wider whitespace-nowrap ${
                           queueMode === "github-actions"
-                            ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-[#334155]"
-                            : "bg-sky-500 hover:bg-sky-400 text-slate-950 cursor-pointer"
+                            ? "bg-white text-slate-500 cursor-not-allowed border border-slate-200 shadow-sm"
+                            : "bg-sky-500 hover:bg-sky-400 text-white cursor-pointer"
                         }`}
                       >
                         {isPolling ? (
@@ -711,7 +704,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                           </>
                         ) : queueMode === "github-actions" ? (
                           <>
-                            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                            <CheckCircle2 className="w-3 h-3 text-blue-600" />
                             External Cron Active
                           </>
                         ) : (
@@ -723,35 +716,35 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                       </button>
                     </div>
                     {queueMode === "github-actions" ? (
-                      <div className="mt-4 p-4 bg-slate-950 border border-sky-500/30 font-mono text-xs text-slate-300 space-y-3">
-                        <div className="flex items-center gap-2 text-sky-400 font-bold uppercase tracking-wider border-b border-slate-800 pb-1.5">
+                      <div className="mt-4 p-4 bg-slate-50 border border-sky-500/30 font-sans text-xs text-slate-700 space-y-3">
+                        <div className="flex items-center gap-2 text-sky-400 font-bold tracking-wider border-b border-slate-200 pb-1.5">
                           <Terminal className="w-4 h-4 text-sky-400" />
                           <span>Enterprise Hybrid-Cloud Orchestrator</span>
                         </div>
-                        <p className="text-[11px] leading-relaxed text-slate-400">
-                          To run fleet synchronization completely for <span className="text-emerald-400 font-bold">free</span> without hitting Cloud Run CPU limits or paying for Google Cloud Tasks, configure these secrets in your <span className="text-white font-bold">GitHub Repository Settings &rarr; Secrets and Variables &rarr; Actions</span>:
+                        <p className="text-xs leading-relaxed text-slate-500">
+                          To run fleet synchronization completely for <span className="text-blue-600 font-bold">free</span> without hitting Cloud Run CPU limits or paying for Google Cloud Tasks, configure these secrets in your <span className="text-slate-900 font-bold">GitHub Repository Settings &rarr; Secrets and Variables &rarr; Actions</span>:
                         </p>
-                        <ul className="space-y-2 text-[10px] border-y border-slate-800/80 py-2">
+                        <ul className="space-y-2 text-xs border-y border-slate-200/80 py-2">
                           <li className="flex flex-col gap-0.5">
-                            <span className="text-white font-bold font-mono">1. FIREBASE_SERVICE_ACCOUNT_KEY</span>
+                            <span className="text-slate-900 font-bold font-sans">1. FIREBASE_SERVICE_ACCOUNT_KEY</span>
                             <span className="text-slate-500">Your Firebase Admin private key JSON string (enables the GitHub Action to securely query registered clients).</span>
                           </li>
                           <li className="flex flex-col gap-0.5">
-                            <span className="text-white font-bold font-mono">2. APP_BASE_URL</span>
+                            <span className="text-slate-900 font-bold font-sans">2. APP_BASE_URL</span>
                             <span className="text-slate-500">Your Cloud Run base address (e.g., <code className="text-sky-300">https://your-app-url.com</code>).</span>
                           </li>
                           <li className="flex flex-col gap-0.5">
-                            <span className="text-white font-bold font-mono">3. TASK_WORKER_SECRET</span>
+                            <span className="text-slate-900 font-bold font-sans">3. TASK_WORKER_SECRET</span>
                             <span className="text-slate-500">A secure secret token matching your server env to shield the mutation endpoint.</span>
                           </li>
                         </ul>
-                        <div className="bg-emerald-500/10 border-l-2 border-emerald-500 p-2.5 text-[10px] text-emerald-300 leading-relaxed">
+                        <div className="bg-blue-600/10 border-l-2 border-blue-600 p-2.5 text-xs text-blue-800 leading-relaxed">
                           ⚡ <strong>How it works:</strong> The GitHub workflow runs twice daily on GitHub's infrastructure. It fetches clients, resolves weather, and updates landing pages sequentially for each client.
                         </div>
                       </div>
                     ) : (
-                      <p className="text-[9px] text-slate-500 font-mono mt-2 leading-relaxed">
-                        * Local Simulated mode is <span className="text-emerald-400 font-bold">100% free with no Google Cloud account required</span>, spawning background task workers instantly.
+                      <p className="text-[10px] text-slate-500 font-sans mt-2 leading-relaxed">
+                        * Local Simulated mode is <span className="text-blue-600 font-bold">100% free with no Google Cloud account required</span>, spawning background task workers instantly.
                       </p>
                     )}
                   </div>
@@ -759,46 +752,46 @@ exports.weatherWebmasterPipeline = async (req, res) => {
               </div>
 
               {/* Gemini & Capacity block - 5 cols */}
-              <div className="md:col-span-5 bg-[#020617] border border-[#334155] p-5 flex flex-col justify-between">
+              <div className="md:col-span-5 bg-white border border-slate-300 shadow-sm p-5 flex flex-col justify-between">
                 <div>
-                  <span className="label-mono font-semibold text-slate-400">Gemini AI Engine Settings</span>
-                  <div className="mt-2.5 p-3.5 bg-emerald-500/10 border-l-2 border-emerald-500 text-[11px] leading-relaxed text-emerald-100 font-mono">
+                  <span className="text-xs font-semibold tracking-wider text-slate-500">Gemini AI Engine Settings</span>
+                  <div className="mt-2.5 p-3.5 bg-blue-600/10 border-l-2 border-blue-600 text-xs leading-relaxed text-blue-800 font-sans">
                     Strict JSON schema enforcement is active. The AI output is structured and validated automatically to ensure flawless landing page updates.
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-800">
+                <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-200">
                   <div className="flex flex-col">
-                    <span className="label-mono font-semibold text-slate-400">Queue Capacity</span>
+                    <span className="text-xs font-semibold tracking-wider text-slate-500">Queue Capacity</span>
                     <div className="flex items-end gap-1 mt-1">
-                      <span className="metric-val text-white">98.4</span>
-                      <span className="text-[10px] mb-1 text-slate-500 font-mono">%</span>
+                      <span className="metric-val text-slate-900">98.4</span>
+                      <span className="text-xs mb-1 text-slate-500 font-sans">%</span>
                     </div>
                     <div className="w-full h-3.5 grid grid-cols-10 gap-0.5 mt-2">
-                      <div className="bg-emerald-500"></div>
-                      <div className="bg-emerald-500"></div>
-                      <div className="bg-emerald-500"></div>
-                      <div className="bg-emerald-500"></div>
-                      <div className="bg-emerald-500"></div>
-                      <div className="bg-emerald-500"></div>
-                      <div className="bg-emerald-500"></div>
-                      <div className="bg-emerald-500"></div>
-                      <div className="bg-emerald-500"></div>
-                      <div className="bg-slate-800"></div>
+                      <div className="bg-blue-600"></div>
+                      <div className="bg-blue-600"></div>
+                      <div className="bg-blue-600"></div>
+                      <div className="bg-blue-600"></div>
+                      <div className="bg-blue-600"></div>
+                      <div className="bg-blue-600"></div>
+                      <div className="bg-blue-600"></div>
+                      <div className="bg-blue-600"></div>
+                      <div className="bg-blue-600"></div>
+                      <div className="bg-white"></div>
                     </div>
                   </div>
                   <div className="flex flex-col justify-between">
                     <div>
-                      <span className="label-mono font-semibold text-slate-400">Request Interval</span>
+                      <span className="text-xs font-semibold tracking-wider text-slate-500">Request Interval</span>
                       <div className="flex items-end gap-1 mt-0.5">
-                        <span className="text-lg font-light font-mono text-white">1500</span>
-                        <span className="text-[10px] text-slate-500 font-mono">MS</span>
+                        <span className="text-lg font-light font-sans text-slate-900">1500</span>
+                        <span className="text-xs text-slate-500 font-sans">MS</span>
                       </div>
                     </div>
                     <div>
-                      <span className="label-mono font-semibold text-slate-400">Weather API Latency</span>
+                      <span className="text-xs font-semibold tracking-wider text-slate-500">Weather API Latency</span>
                       <div className="flex items-end gap-1 mt-0.5">
-                        <span className="text-lg font-light font-mono text-white">42</span>
-                        <span className="text-[10px] text-slate-500 font-mono">MS</span>
+                        <span className="text-lg font-light font-sans text-slate-900">42</span>
+                        <span className="text-xs text-slate-500 font-sans">MS</span>
                       </div>
                     </div>
                   </div>
@@ -806,20 +799,20 @@ exports.weatherWebmasterPipeline = async (req, res) => {
               </div>
 
               {/* Live Terminal Terminal Console - 12 cols */}
-              <div className="md:col-span-12 bg-[#020617] border border-[#334155] flex flex-col">
-                <div className="bg-slate-950 px-5 py-3 border-b border-[#334155] flex items-center justify-between">
+              <div className="md:col-span-12 bg-white border border-slate-300 shadow-sm flex flex-col">
+                <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Terminal className="w-4 h-4 text-emerald-500" />
-                    <span className="label-mono">DevOps Logs Terminal</span>
+                    <Terminal className="w-4 h-4 text-blue-600" />
+                    <span className="text-xs font-bold tracking-wider text-slate-500">DevOps Logs Terminal</span>
                   </div>
                   {activeRun && (
                     <div className="flex items-center gap-3">
-                      <span className="text-[10px] font-mono bg-slate-900 px-2 py-0.5 border border-slate-800 text-slate-400">
+                      <span className="text-xs font-sans bg-white px-2 py-0.5 border border-slate-200 shadow-sm text-slate-500">
                         ID: {activeRun.id}
                       </span>
-                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-none font-bold uppercase border ${
+                      <span className={`text-xs font-sans px-2 py-0.5 rounded-lg font-bold border ${
                         activeRun.status === "running" ? "bg-sky-500/10 text-sky-400 border-sky-500/20 animate-pulse" :
-                        activeRun.status === "completed" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
+                        activeRun.status === "completed" ? "bg-blue-600/10 text-blue-600 border-blue-600/20" :
                         "bg-rose-500/10 text-rose-400 border-rose-500/20"
                       }`}>
                         {activeRun.status}
@@ -830,40 +823,40 @@ exports.weatherWebmasterPipeline = async (req, res) => {
 
                 {/* Pipeline Metrics Summary */}
                 {activeRun && (
-                  <div className="grid grid-cols-4 border-b border-slate-800 bg-slate-950/40 text-center text-xs font-mono py-2.5 text-slate-400">
-                    <div className="border-r border-slate-800">
-                      <div className="text-[9px] text-slate-500 uppercase tracking-wider">Total Clients</div>
-                      <div className="font-semibold text-slate-200 mt-0.5">{activeRun.totalClients} domains</div>
+                  <div className="grid grid-cols-4 border-b border-slate-200 bg-slate-50/40 text-center text-xs font-sans py-2.5 text-slate-500">
+                    <div className="border-r border-slate-200">
+                      <div className="text-[10px] text-slate-500 tracking-wider">Total Clients</div>
+                      <div className="font-semibold text-slate-800 mt-0.5">{activeRun.totalClients} domains</div>
                     </div>
-                    <div className="border-r border-slate-800">
-                      <div className="text-[9px] text-slate-500 uppercase tracking-wider">Processed</div>
+                    <div className="border-r border-slate-200">
+                      <div className="text-[10px] text-slate-500 tracking-wider">Processed</div>
                       <div className="font-semibold text-sky-400 mt-0.5">{activeRun.processedClients}</div>
                     </div>
-                    <div className="border-r border-slate-800">
-                      <div className="text-[9px] text-slate-500 uppercase tracking-wider">Revalidated</div>
-                      <div className="font-semibold text-emerald-400 mt-0.5">{activeRun.successfulClients}</div>
+                    <div className="border-r border-slate-200">
+                      <div className="text-[10px] text-slate-500 tracking-wider">Revalidated</div>
+                      <div className="font-semibold text-blue-600 mt-0.5">{activeRun.successfulClients}</div>
                     </div>
                     <div>
-                      <div className="text-[9px] text-slate-500 uppercase tracking-wider">Bypassed</div>
+                      <div className="text-[10px] text-slate-500 tracking-wider">Bypassed</div>
                       <div className="font-semibold text-amber-500 mt-0.5">{activeRun.failedClients}</div>
                     </div>
                   </div>
                 )}
 
                 {/* Shell Logs Canvas */}
-                <div className="bg-slate-950 p-5 min-h-[300px] max-h-[450px] overflow-y-auto font-mono text-xs flex flex-col gap-2 relative">
+                <div className="bg-slate-50 p-5 min-h-[300px] max-h-[450px] overflow-y-auto font-sans text-xs flex flex-col gap-2 relative">
                   {!activeRun ? (
                     <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-600 gap-2">
                       <Terminal className="w-8 h-8 text-slate-800" />
-                      <p className="text-center text-xs max-w-sm text-slate-400">No active execution logs. Run the weather webmaster pipeline to stream real-time events.</p>
+                      <p className="text-center text-xs max-w-sm text-slate-500">No active execution logs. Run the weather webmaster pipeline to stream real-time events.</p>
                     </div>
                   ) : (
                     <>
                       {activeRun.logs.map((log: PipelineLog, idx: number) => {
-                        let textClass = "text-slate-300";
+                        let textClass = "text-slate-700";
                         let tagClass = "text-slate-500";
                         if (log.level === "success") {
-                          textClass = "text-emerald-400 font-medium";
+                          textClass = "text-blue-600 font-medium";
                           tagClass = "text-emerald-600";
                         } else if (log.level === "warn") {
                           textClass = "text-amber-400";
@@ -875,8 +868,8 @@ exports.weatherWebmasterPipeline = async (req, res) => {
 
                         return (
                           <div key={idx} className="flex gap-2.5 items-start leading-relaxed animate-fadeIn">
-                            <span className="text-slate-500 select-none text-[11px] font-medium shrink-0 pt-0.5">{log.timestamp}</span>
-                            <span className={`font-bold uppercase select-none shrink-0 ${tagClass}`}>
+                            <span className="text-slate-500 select-none text-xs font-medium shrink-0 pt-0.5">{log.timestamp}</span>
+                            <span className={`font-bold select-none shrink-0 ${tagClass}`}>
                               [{log.level}]
                             </span>
                             <span className={`flex-1 ${textClass}`}>{log.message}</span>
@@ -890,68 +883,68 @@ exports.weatherWebmasterPipeline = async (req, res) => {
               </div>
 
               {/* Try/Catch Resiliency - 4 cols */}
-              <div className="md:col-span-4 bg-[#020617] border border-[#334155] p-5 flex flex-col justify-between">
-                <span className="label-mono font-semibold text-slate-400">System Reliability</span>
+              <div className="md:col-span-4 bg-white border border-slate-300 shadow-sm p-5 flex flex-col justify-between">
+                <span className="text-xs font-semibold tracking-wider text-slate-500">System Reliability</span>
                 <div className="mt-4 grid grid-cols-2 gap-4 flex-1">
-                  <div className="border border-slate-800 p-3 flex flex-col justify-between">
+                  <div className="border border-slate-200 shadow-sm p-3 flex flex-col justify-between">
                     <div>
-                      <span className="text-[9px] uppercase font-bold text-slate-500 font-mono">Error Coverage</span>
-                      <div className="text-lg font-mono text-white mt-1">100%</div>
+                      <span className="text-[10px] font-bold text-slate-500 font-sans">Error Coverage</span>
+                      <div className="text-lg font-sans text-slate-900 mt-1">100%</div>
                     </div>
-                    <div className="h-1 w-full bg-emerald-500 mt-2"></div>
+                    <div className="h-1 w-full bg-blue-600 mt-2"></div>
                   </div>
-                  <div className="border border-slate-800 p-3 flex flex-col justify-between">
+                  <div className="border border-slate-200 shadow-sm p-3 flex flex-col justify-between">
                     <div>
-                      <span className="text-[9px] uppercase font-bold text-slate-500 font-mono">Client Protection</span>
-                      <div className="text-lg font-mono text-white mt-1">ENABLED</div>
+                      <span className="text-[10px] font-bold text-slate-500 font-sans">Client Protection</span>
+                      <div className="text-lg font-sans text-slate-900 mt-1">ENABLED</div>
                     </div>
-                    <div className="h-1 w-full bg-emerald-500 mt-2"></div>
+                    <div className="h-1 w-full bg-blue-600 mt-2"></div>
                   </div>
                 </div>
               </div>
 
               {/* Analytics - 8 cols */}
-              <div className="md:col-span-8 bg-[#020617] border border-[#334155] p-5 flex flex-col justify-between">
+              <div className="md:col-span-8 bg-white border border-slate-300 shadow-sm p-5 flex flex-col justify-between">
                 <div className="flex justify-between items-center mb-4">
-                  <span className="label-mono font-semibold text-slate-400">Weather Sync Activity (Last 12 Hours)</span>
-                  <div className="flex gap-4 font-mono text-[9px] text-slate-400">
+                  <span className="text-xs font-semibold tracking-wider text-slate-500">Weather Sync Activity (Last 12 Hours)</span>
+                  <div className="flex gap-4 font-sans text-[10px] text-slate-500">
                     <div className="flex items-center gap-1.5">
                       <div className="w-2 h-2 rounded-full bg-blue-500"></div>
                       <span>Temperature Data</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                      <div className="w-2 h-2 rounded-full bg-blue-600"></div>
                       <span>Generated Content</span>
                     </div>
                   </div>
                 </div>
                 <div className="flex-1 flex items-end gap-1.5 px-2 pb-2 h-24">
                   <div className="w-full bg-blue-500/20 hover:bg-blue-500/40 transition-colors" style={{ height: "30%" }}></div>
-                  <div className="w-full bg-emerald-500/20 hover:bg-emerald-500/40 transition-colors" style={{ height: "45%" }}></div>
+                  <div className="w-full bg-blue-50 hover:bg-blue-100 hover:bg-blue-600/40 transition-colors" style={{ height: "45%" }}></div>
                   <div className="w-full bg-blue-500/20 hover:bg-blue-500/40 transition-colors" style={{ height: "25%" }}></div>
-                  <div className="w-full bg-emerald-500/20 hover:bg-emerald-500/40 transition-colors" style={{ height: "60%" }}></div>
+                  <div className="w-full bg-blue-50 hover:bg-blue-100 hover:bg-blue-600/40 transition-colors" style={{ height: "60%" }}></div>
                   <div className="w-full bg-blue-500/20 hover:bg-blue-500/40 transition-colors" style={{ height: "40%" }}></div>
-                  <div className="w-full bg-emerald-500/20 hover:bg-emerald-500/40 transition-colors" style={{ height: "70%" }}></div>
+                  <div className="w-full bg-blue-50 hover:bg-blue-100 hover:bg-blue-600/40 transition-colors" style={{ height: "70%" }}></div>
                   <div className="w-full bg-blue-500/20 hover:bg-blue-500/40 transition-colors" style={{ height: "55%" }}></div>
-                  <div className="w-full bg-emerald-500/20 hover:bg-emerald-500/40 transition-colors" style={{ height: "85%" }}></div>
+                  <div className="w-full bg-blue-50 hover:bg-blue-100 hover:bg-blue-600/40 transition-colors" style={{ height: "85%" }}></div>
                   <div className="w-full bg-blue-500/20 hover:bg-blue-500/40 transition-colors" style={{ height: "30%" }}></div>
-                  <div className="w-full bg-emerald-500/20 hover:bg-emerald-500/40 transition-colors" style={{ height: "90%" }}></div>
+                  <div className="w-full bg-blue-50 hover:bg-blue-100 hover:bg-blue-600/40 transition-colors" style={{ height: "90%" }}></div>
                   <div className="w-full bg-blue-500/20 hover:bg-blue-500/40 transition-colors" style={{ height: "20%" }}></div>
-                  <div className="w-full bg-emerald-500/20 hover:bg-emerald-500/40 transition-colors" style={{ height: "45%" }}></div>
+                  <div className="w-full bg-blue-50 hover:bg-blue-100 hover:bg-blue-600/40 transition-colors" style={{ height: "45%" }}></div>
                   <div className="w-full bg-blue-500/20 hover:bg-blue-500/40 transition-colors" style={{ height: "35%" }}></div>
-                  <div className="w-full bg-emerald-500/20 hover:bg-emerald-500/40 transition-colors" style={{ height: "80%" }}></div>
+                  <div className="w-full bg-blue-50 hover:bg-blue-100 hover:bg-blue-600/40 transition-colors" style={{ height: "80%" }}></div>
                 </div>
               </div>
 
               {/* History Table - 12 cols */}
-              <div className="md:col-span-12 bg-[#020617] border border-[#334155]">
-                <div className="px-5 py-3 border-b border-[#334155] flex items-center justify-between">
-                  <h3 className="label-mono font-semibold text-slate-400">Activity History</h3>
-                  <span className="text-[10px] text-slate-500 font-mono">Execution History Logs</span>
+              <div className="md:col-span-12 bg-white border border-slate-300 shadow-sm">
+                <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between">
+                  <h3 className="text-xs font-semibold tracking-wider text-slate-500">Activity History</h3>
+                  <span className="text-xs text-slate-500 font-sans">Execution History Logs</span>
                 </div>
                 <div className="divide-y divide-slate-800 max-h-[180px] overflow-y-auto">
                   {runs.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-slate-500 font-mono">No historical sync tasks have run yet.</div>
+                    <div className="p-4 text-center text-xs text-slate-500 font-sans">No historical sync tasks have run yet.</div>
                   ) : (
                     runs.map((r) => (
                       <div
@@ -960,24 +953,24 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                           setActiveRunId(r.id);
                           setActiveRun(r);
                         }}
-                        className={`px-5 py-3 flex items-center justify-between text-xs cursor-pointer hover:bg-slate-900/50 transition-all border-b border-slate-900 last:border-b-0 ${
-                          activeRunId === r.id ? "bg-slate-900 font-semibold" : ""
+                        className={`px-5 py-3 flex items-center justify-between text-xs cursor-pointer hover:bg-white/50 transition-all border-b border-slate-200 last:border-b-0 ${
+                          activeRunId === r.id ? "bg-white font-semibold" : ""
                         }`}
                       >
                         <div className="flex items-center gap-3">
-                          <Activity className={`w-4 h-4 ${r.status === "completed" ? "text-emerald-500" : r.status === "failed" ? "text-rose-500" : "text-sky-500 animate-pulse"}`} />
+                          <Activity className={`w-4 h-4 ${r.status === "completed" ? "text-blue-600" : r.status === "failed" ? "text-rose-500" : "text-sky-500 animate-pulse"}`} />
                           <div>
-                            <div className="font-mono text-slate-300">Run for: <span className="text-emerald-400">{r.city}</span></div>
-                            <div className="text-[10px] text-slate-500 font-mono mt-0.5">Started: {new Date(r.startedAt).toLocaleTimeString()}</div>
+                            <div className="font-sans text-slate-700">Run for: <span className="text-blue-600">{r.city}</span></div>
+                            <div className="text-xs text-slate-500 font-sans mt-0.5">Started: {new Date(r.startedAt).toLocaleTimeString()}</div>
                           </div>
                         </div>
 
                         <div className="flex items-center gap-4">
-                          <div className="text-right text-[10px] font-mono text-slate-500 hidden sm:block">
+                          <div className="text-right text-xs font-sans text-slate-500 hidden sm:block">
                             {r.successfulClients}/{r.totalClients} Success
                           </div>
-                          <span className={`text-[9px] font-mono font-bold px-2 py-0.5 border uppercase ${
-                            r.status === "completed" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
+                          <span className={`text-[10px] font-sans font-bold px-2 py-0.5 border ${
+                            r.status === "completed" ? "bg-blue-600/10 text-blue-600 border-blue-600/20" :
                             r.status === "running" ? "bg-sky-500/10 text-sky-400 border-sky-500/20" :
                             "bg-rose-500/10 text-rose-400 border-rose-500/20"
                           }`}>
@@ -995,18 +988,18 @@ exports.weatherWebmasterPipeline = async (req, res) => {
             <div className="flex flex-col gap-6">
               
               {/* Add Client Header */}
-              <div className="bg-[#020617] border border-[#334155] p-6">
+              <div className="bg-white border border-slate-300 shadow-sm p-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                   <div>
-                    <span className="label-mono font-semibold text-slate-400">Client Directory</span>
-                    <h2 className="text-sm font-semibold text-slate-200 mt-1">Registered Client Domains</h2>
-                    <p className="text-xs text-slate-400 mt-1 max-w-xl">
+                    <span className="text-xs font-semibold tracking-wider text-slate-500">Client Directory</span>
+                    <h2 className="text-sm font-semibold text-slate-800 mt-1">Registered Client Domains</h2>
+                    <p className="text-xs text-slate-500 mt-1 max-w-xl">
                       Register and manage your clients' web domains. Adding a client here creates their custom dashboard, allowing the weather-adaptive system to dynamically tailor their landing pages.
                     </p>
                   </div>
                   <button
                     onClick={() => setIsAdding(!isAdding)}
-                    className="bg-slate-900 hover:bg-slate-800 text-slate-200 px-4 py-2 text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer border border-[#334155] rounded-none font-mono"
+                    className="bg-white hover:bg-white text-slate-800 px-4 py-2 text-xs font-semibold tracking-wider flex items-center gap-1.5 cursor-pointer border border-slate-200 shadow-sm rounded-lg font-sans"
                   >
                     <Plus className={`w-3.5 h-3.5 transition-transform ${isAdding ? "rotate-45" : ""}`} />
                     {isAdding ? "Close Form" : "Add New Client"}
@@ -1015,44 +1008,44 @@ exports.weatherWebmasterPipeline = async (req, res) => {
 
                 {/* Add Form Collapsible */}
                 {isAdding && (
-                  <form onSubmit={registerClient} className="border-t border-[#334155] pt-5 mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <form onSubmit={registerClient} className="border-t border-slate-200 pt-5 mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
                     {submitError && (
-                      <div className="col-span-1 md:col-span-2 bg-rose-500/10 text-rose-400 border border-rose-500/20 p-3 rounded-none text-xs flex items-center gap-2 font-mono">
+                      <div className="col-span-1 md:col-span-2 bg-rose-500/10 text-rose-400 border border-rose-500/20 p-3 rounded-lg text-xs flex items-center gap-2 font-sans">
                         <AlertTriangle className="w-4 h-4" />
                         {submitError}
                       </div>
                     )}
                     
                     <div>
-                      <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">Client Domain URL (e.g. hendersonhvac.com) *</label>
+                      <label className="block text-xs font-sans text-slate-500 mb-1.5">Client Domain URL (e.g. hendersonhvac.com) *</label>
                       <input
                         type="text"
                         placeholder="E.g., hendersonhvac.com"
                         value={newClientDomain}
                         onChange={(e) => setNewClientDomain(e.target.value.toLowerCase())}
-                        className="w-full bg-[#020617] border border-[#334155] rounded-none px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
+                        className="w-full bg-white border border-slate-300 shadow-sm rounded-md px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-sans"
                         required
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">Business Name *</label>
+                      <label className="block text-xs font-sans text-slate-500 mb-1.5">Business Name *</label>
                       <input
                         type="text"
                         placeholder="E.g., Henderson HVAC Services"
                         value={newClientName}
                         onChange={(e) => setNewClientName(e.target.value)}
-                        className="w-full bg-[#020617] border border-[#334155] rounded-none px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
+                        className="w-full bg-white border border-slate-300 shadow-sm rounded-md px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-sans"
                         required
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">Service City *</label>
+                      <label className="block text-xs font-sans text-slate-500 mb-1.5">Service City *</label>
                       <select
                         value={newClientCity}
                         onChange={(e) => setNewClientCity(e.target.value)}
-                        className="w-full bg-[#020617] border border-[#334155] rounded-none px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
+                        className="w-full bg-white border border-slate-300 shadow-sm rounded-md px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-sans"
                       >
                         <option value="Dallas">Dallas</option>
                         <option value="Phoenix">Phoenix</option>
@@ -1068,36 +1061,36 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                     </div>
 
                     <div>
-                      <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">Phone Number / Hotline *</label>
+                      <label className="block text-xs font-sans text-slate-500 mb-1.5">Phone Number / Hotline *</label>
                       <input
                         type="text"
                         placeholder="E.g., (214) 555-0192"
                         value={newClientPhone}
                         onChange={(e) => setNewClientPhone(e.target.value)}
-                        className="w-full bg-[#020617] border border-[#334155] rounded-none px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
+                        className="w-full bg-white border border-slate-300 shadow-sm rounded-md px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-sans"
                         required
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">Webmaster Revalidation URL (Optional)</label>
+                      <label className="block text-xs font-sans text-slate-500 mb-1.5">Webmaster Revalidation URL (Optional)</label>
                       <input
                         type="url"
                         placeholder="E.g., https://clientdomain.com/api/revalidate"
                         value={newClientIsr}
                         onChange={(e) => setNewClientIsr(e.target.value)}
-                        className="w-full bg-[#020617] border border-[#334155] rounded-none px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
+                        className="w-full bg-white border border-slate-300 shadow-sm rounded-md px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-sans"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">Security Token (Optional)</label>
+                      <label className="block text-xs font-sans text-slate-500 mb-1.5">Security Token (Optional)</label>
                       <input
                         type="text"
                         placeholder="E.g., sec_client_reval_983"
                         value={newClientSecret}
                         onChange={(e) => setNewClientSecret(e.target.value)}
-                        className="w-full bg-[#020617] border border-[#334155] rounded-none px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
+                        className="w-full bg-white border border-slate-300 shadow-sm rounded-md px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-sans"
                       />
                     </div>
 
@@ -1105,13 +1098,13 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                       <button
                         type="button"
                         onClick={() => setIsAdding(false)}
-                        className="px-4 py-2 text-xs text-slate-400 hover:text-slate-200 font-mono"
+                        className="px-4 py-2 text-xs text-slate-500 hover:text-slate-800 font-sans"
                       >
                         Cancel
                       </button>
                       <button
                         type="submit"
-                        className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs px-5 py-2 rounded-none cursor-pointer uppercase font-mono tracking-wider"
+                        className="bg-blue-600 hover:bg-blue-600 text-white font-bold text-xs px-5 py-2 rounded-lg cursor-pointer font-sans tracking-wider"
                       >
                         Save Client Domain
                       </button>
@@ -1121,9 +1114,29 @@ exports.weatherWebmasterPipeline = async (req, res) => {
               </div>
 
               {/* Tenants Grid/List */}
-              <div className="bg-[#020617] border border-[#334155] overflow-hidden">
-                <table className="w-full text-left text-xs text-slate-300">
-                  <thead className="bg-slate-950 text-[10px] uppercase font-mono text-slate-500 border-b border-[#334155]">
+              <div className="bg-white border border-slate-300 shadow-sm overflow-hidden">
+                
+                {clients.length === 0 && pendingClients.length === 0 ? (
+                  <div className="text-center py-16 px-6">
+                    <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100">
+                      <Globe className="w-8 h-8" />
+                    </div>
+                    <h3 className="text-sm font-semibold text-slate-800 mb-2">No clients registered</h3>
+                    <p className="text-xs text-slate-500 max-w-sm mx-auto mb-6 leading-relaxed">
+                      Add your first client to provision their dashboard and enable weather-adaptive landing pages.
+                    </p>
+                    <button
+                      onClick={() => setIsAdding(true)}
+                      className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-sm px-6 py-2.5 rounded-lg text-xs font-semibold font-sans transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add your first client
+                    </button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs text-slate-700">
+                  <thead className="bg-slate-50 text-xs font-sans text-slate-500 border-b border-slate-200">
                     <tr>
                       <th className="px-6 py-4">Client Domain</th>
                       <th className="px-6 py-4">Business Name</th>
@@ -1137,25 +1150,25 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                       <tr
                         key={c.domain}
                         onClick={() => setSelectedClient(c)}
-                        className={`hover:bg-slate-900/50 cursor-pointer transition-all ${
-                          selectedClient?.domain === c.domain ? "bg-slate-900 font-semibold text-white" : ""
+                        className={`hover:bg-slate-50 cursor-pointer transition-all ${
+                          selectedClient?.domain === c.domain ? "bg-slate-50 font-semibold text-slate-900" : ""
                         }`}
                       >
-                        <td className="px-6 py-4 font-mono text-emerald-400 flex items-center gap-1.5">
+                        <td className="px-6 py-4 font-sans text-blue-600 flex items-center gap-1.5">
                           <Globe className="w-3.5 h-3.5 text-slate-500" />
                           {c.domain}
                         </td>
-                        <td className="px-6 py-4 text-slate-200">{c.businessName}</td>
+                        <td className="px-6 py-4 text-slate-800">{c.businessName}</td>
                         <td className="px-6 py-4">
-                          <span className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded-none text-slate-300 font-mono text-[11px]">
+                          <span className="bg-white border border-slate-200 shadow-sm px-2 py-0.5 rounded-lg text-slate-700 font-sans text-xs">
                             {c.city}
                           </span>
                         </td>
-                        <td className="px-6 py-4 font-mono text-slate-400">{c.phone}</td>
+                        <td className="px-6 py-4 font-sans text-slate-500">{c.phone}</td>
                         <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={() => deleteClient(c.domain)}
-                            className="text-slate-500 hover:text-rose-400 p-1 rounded-none hover:bg-rose-500/10 cursor-pointer"
+                            className="text-slate-500 hover:text-rose-400 p-1 rounded-lg hover:bg-rose-50 cursor-pointer"
                             title="De-register domain"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -1163,8 +1176,32 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                         </td>
                       </tr>
                     ))}
+                    {pendingClients.map((c) => (
+                      <tr
+                        key={c.domain}
+                        className="opacity-50 pointer-events-none"
+                      >
+                        <td className="px-6 py-4 font-sans text-blue-600 flex items-center gap-1.5">
+                          <RefreshCw className="w-3.5 h-3.5 text-blue-600 animate-spin" />
+                          {c.domain}
+                        </td>
+                        <td className="px-6 py-4 text-slate-800">{c.businessName}</td>
+                        <td className="px-6 py-4">
+                          <span className="bg-white border border-slate-200 shadow-sm px-2 py-0.5 rounded-lg text-slate-700 font-sans text-xs">
+                            {c.city}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 font-sans text-slate-500">{c.phone}</td>
+                        <td className="px-6 py-4 text-right">
+                          <span className="text-xs text-slate-400 italic">Syncing...</span>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
+                  </div>
+                )}
+
               </div>
             </div>
           )}
@@ -1173,27 +1210,27 @@ exports.weatherWebmasterPipeline = async (req, res) => {
           {activeTab === "billing" && (
             <div className="flex flex-col gap-6">
               {/* Concept Block */}
-              <div className="bg-[#020617] border border-[#334155] p-6">
-                <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-800">
+              <div className="bg-white border border-slate-300 shadow-sm p-6">
+                <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-200">
                   <div className="flex items-center gap-2.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <h3 className="font-mono text-xs font-bold uppercase tracking-widest text-slate-200">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse"></span>
+                    <h3 className="font-sans text-xs font-bold tracking-widest text-slate-800">
                       SaaS Billing Integration
                     </h3>
                   </div>
-                  <span className="font-mono text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 border border-emerald-500/20 uppercase tracking-wider">
+                  <span className="font-sans text-xs text-blue-600 bg-blue-600/10 px-2 py-0.5 border border-blue-600/20 tracking-wider">
                     Secure Gateway Connected
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                <p className="text-xs text-slate-500 leading-relaxed mb-4">
                   Our service platform is fully integrated with PayPal for automated client registration. 
                   Rather than manual setup, business owners subscribe directly via PayPal buttons on your sales page. 
-                  Our secure webhook handler at <code className="text-emerald-400 font-mono">/api/webhooks/paypal</code> immediately 
+                  Our secure webhook handler at <code className="text-blue-600 font-sans">/api/webhooks/paypal</code> immediately 
                   receives the subscription details and automatically provisions their dynamic website and theme.
                 </p>
 
-                <div className="bg-slate-950 p-4 border border-slate-800 font-mono text-[10px] leading-relaxed text-slate-500">
-                  <div className="text-slate-400 mb-1 font-bold">Automated Provisioning Flow:</div>
+                <div className="bg-slate-50 p-4 border border-slate-200 shadow-sm font-sans text-xs leading-relaxed text-slate-500">
+                  <div className="text-slate-500 mb-1 font-bold">Automated Provisioning Flow:</div>
                   <div>[Customer Checkout] &mdash;(PayPal Smart Button)&mdash;&gt; [PayPal API Gateway]</div>
                   <div className="pl-44">&lsquo;&mdash;&mdash;&mdash;(Secure Webhook POST) &mdash;&mdash;&mdash;&gt; [/api/webhooks/paypal]</div>
                   <div className="pl-96">&lsquo;&mdash;&mdash;&mdash;&gt; [Client Website Dashboard Provisioned]</div>
@@ -1203,66 +1240,66 @@ exports.weatherWebmasterPipeline = async (req, res) => {
               {/* Form & Sandbox Terminal */}
               <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
                 {/* Simulation Form */}
-                <div className="md:col-span-7 bg-[#020617] border border-[#334155] p-6 flex flex-col gap-5">
+                <div className="md:col-span-7 bg-white border border-slate-300 shadow-sm p-6 flex flex-col gap-5">
                   <div>
-                    <h4 className="font-mono text-xs font-bold text-slate-200 uppercase mb-1">
+                    <h4 className="font-sans text-xs font-bold text-slate-800 mb-1">
                       1. Client Checkout Details
                     </h4>
-                    <p className="text-[11px] text-slate-500">
+                    <p className="text-xs text-slate-500">
                       Enter the client's business details to test our checkout. The system will use PayPal's secure payload pass-through to register the domain dynamically upon payment.
                     </p>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="flex flex-col gap-1.5 col-span-2 md:col-span-1">
-                      <label className="text-[10px] uppercase font-mono text-slate-400">Business Name</label>
+                      <label className="text-xs font-sans text-slate-500">Business Name</label>
                       <input
                         type="text"
                         value={checkoutName}
                         onChange={(e) => setCheckoutName(e.target.value)}
                         placeholder="e.g. Gulf Stream AC & Heating"
-                        className="bg-slate-950 border border-slate-800 p-2.5 text-xs text-slate-200 font-mono focus:border-emerald-500 focus:outline-none"
+                        className="w-full bg-white border border-slate-300 shadow-sm rounded-md px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-sans"
                       />
                     </div>
                     <div className="flex flex-col gap-1.5 col-span-2 md:col-span-1">
-                      <label className="text-[10px] uppercase font-mono text-slate-400">Checkout ZIP Code</label>
+                      <label className="text-xs font-sans text-slate-500">Checkout ZIP Code</label>
                       <input
                         type="text"
                         value={checkoutZipCode}
                         onChange={(e) => setCheckoutZipCode(e.target.value)}
                         placeholder="e.g. 75201"
-                        className="bg-slate-950 border border-slate-800 p-2.5 text-xs text-slate-200 font-mono focus:border-emerald-500 focus:outline-none"
+                        className="w-full bg-white border border-slate-300 shadow-sm rounded-md px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-sans"
                       />
                     </div>
-                    <div className="col-span-2 bg-slate-950 p-3 border border-slate-900 rounded">
-                      <div className="flex items-center gap-1.5 text-[10px] uppercase font-mono text-emerald-400 font-bold mb-1">
-                        <span className="inline-block w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                    <div className="col-span-2 bg-slate-50 p-3 border border-slate-200 rounded">
+                      <div className="flex items-center gap-1.5 text-xs font-sans text-blue-600 font-bold mb-1">
+                        <span className="inline-block w-1.5 h-1.5 bg-blue-600 rounded-full animate-pulse"></span>
                         AI-Powered Client Setup Active
                       </div>
-                      <p className="text-[10px] text-slate-500 leading-relaxed">
+                      <p className="text-xs text-slate-500 leading-relaxed">
                         To simplify onboarding, only Name and ZIP are required. The system automatically launches Gemini to resolve vertical (e.g. Roofing, Plumbing), map territory cities, design visual themes, and define dynamic meteorological triggers.
                       </p>
                     </div>
                   </div>
 
-                  <div className="border-t border-slate-800 my-2"></div>
+                  <div className="border-t border-slate-200 my-2"></div>
 
                   {/* PayPal Buttons */}
                   <div className="flex flex-col gap-4">
                     <div className="flex justify-between items-center text-xs">
-                      <span className="font-mono text-[10px] text-slate-500">Product ID: LIVING-OS-SUBSCRIBE</span>
-                      <span className="font-bold text-slate-300 font-mono">$199 / month</span>
+                      <span className="font-sans text-xs text-slate-500">Product ID: LIVING-OS-SUBSCRIBE</span>
+                      <span className="font-bold text-slate-700 font-sans">$199 / month</span>
                     </div>
 
                     {/* PayPal Gold Button */}
                     <button
                       onClick={() => handlePayPalSubscriptionSimulate()}
                       disabled={isSubmittingCheckout || !checkoutName || !checkoutZipCode}
-                      className={`relative w-full py-3.5 px-4 bg-[#ffc439] hover:bg-[#f4b31a] text-slate-950 font-sans font-bold text-sm tracking-wide transition-all shadow-md flex items-center justify-center gap-2 ${
+                      className={`relative w-full py-3.5 px-4 bg-[#ffc439] hover:bg-[#f4b31a] text-white font-sans font-bold text-sm tracking-wide transition-all shadow-md flex items-center justify-center gap-2 ${
                         isSubmittingCheckout ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
                       }`}
                     >
-                      <span className="italic text-slate-950 font-black tracking-tight text-base font-serif">PayPal</span>
+                      <span className="italic text-white font-black tracking-tight text-base font-serif">PayPal</span>
                       <span className="text-[12px] font-semibold text-slate-900">Subscribe</span>
                     </button>
 
@@ -1270,7 +1307,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                     <button
                       onClick={() => handlePayPalSubscriptionSimulate()}
                       disabled={isSubmittingCheckout || !checkoutName || !checkoutZipCode}
-                      className={`relative w-full py-3.5 px-4 bg-slate-900 hover:bg-slate-850 text-white font-sans font-semibold text-xs tracking-wide transition-all shadow-md flex items-center justify-center gap-2 border border-slate-800 ${
+                      className={`relative w-full py-3.5 px-4 bg-white hover:bg-slate-100 text-slate-900 font-sans font-semibold text-xs tracking-wide transition-all shadow-md flex items-center justify-center gap-2 border border-slate-200 shadow-sm ${
                         isSubmittingCheckout ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
                       }`}
                     >
@@ -1281,51 +1318,91 @@ exports.weatherWebmasterPipeline = async (req, res) => {
 
                 {/* Live Output Console */}
                 <div className="md:col-span-5 flex flex-col gap-4">
-                  <div className="bg-[#020617] border border-[#334155] p-5 flex-1 flex flex-col gap-4 min-h-[350px]">
-                    <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                      <span className="font-mono text-[10px] font-bold text-slate-400 uppercase">
+                  <div className="bg-white border border-slate-300 shadow-sm p-5 flex-1 flex flex-col gap-4 min-h-[350px]">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+                      <span className="font-sans text-xs font-bold text-slate-500 uppercase">
                         Billing Integration Stream
                       </span>
                       <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                        <span className="font-mono text-[9px] text-emerald-400">Ready</span>
+                        <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
+                        <span className="font-sans text-[10px] text-blue-600">Ready</span>
                       </div>
                     </div>
 
                     {/* Logs Screen */}
-                    <div className="flex-1 overflow-y-auto font-mono text-[11px] leading-relaxed flex flex-col gap-2 max-h-[250px] scrollbar-thin">
-                      {checkoutLog.length === 0 ? (
-                        <div className="text-slate-600 italic">
-                          No active checkout logs. Fill out the business details on the left and click "PayPal Subscribe" to simulate a live secure subscription purchase flow.
+                    <div className="flex-1 overflow-y-auto font-sans text-xs leading-relaxed flex flex-col gap-0 max-h-[250px] scrollbar-thin">
+                      {checkoutStep === 0 && checkoutLog.length === 0 ? (
+                        <div className="text-slate-500 italic">
+                          No active checkout session. Fill out the business details on the left and click "PayPal Subscribe" to simulate a live secure subscription purchase flow.
                         </div>
                       ) : (
-                        checkoutLog.map((log, i) => (
-                          <div
-                            key={i}
-                            className={
-                              log.includes("[ERROR]")
-                                ? "text-rose-400"
-                                : log.includes("[SERVER SUCCESS]")
-                                ? "text-emerald-400 font-semibold"
-                                : log.includes("[PAYPAL GATEWAY]")
-                                ? "text-amber-400"
-                                : "text-slate-400"
-                            }
-                          >
-                            {log}
+                        <div className="flex flex-col gap-6 py-2">
+                          {/* Step 1 */}
+                          <div className={`flex items-start gap-4 transition-opacity duration-500 ${checkoutStep >= 1 || checkoutStep === -1 ? 'opacity-100' : 'opacity-0 hidden'}`}>
+                            <div className="mt-0.5 relative z-10 flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-600 shrink-0">
+                              {checkoutStep > 1 || checkoutStep === -1 ? <Check className="w-3 h-3" /> : <RefreshCw className="w-3 h-3 animate-spin" />}
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <span className={`font-semibold ${checkoutStep >= 1 ? 'text-slate-900' : 'text-slate-400'}`}>Verifying payment via PayPal</span>
+                              {checkoutStep === 1 && <span className="text-slate-500 text-[11px]">Contacting secure gateway...</span>}
+                            </div>
                           </div>
-                        ))
+                          
+                          {/* Step 2 */}
+                          <div className={`flex items-start gap-4 transition-opacity duration-500 ${checkoutStep >= 2 || checkoutStep === -1 ? 'opacity-100' : 'opacity-0 hidden'}`}>
+                            <div className="mt-0.5 relative z-10 flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-600 shrink-0">
+                              {checkoutStep > 2 || checkoutStep === -1 ? <Check className="w-3 h-3" /> : <RefreshCw className="w-3 h-3 animate-spin" />}
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <span className={`font-semibold ${checkoutStep >= 2 ? 'text-slate-900' : 'text-slate-400'}`}>Analyzing territory data</span>
+                              {checkoutStep === 2 && <span className="text-slate-500 text-[11px]">Identifying vertical mapping and weather conditions...</span>}
+                            </div>
+                          </div>
+
+                          {/* Step 3 */}
+                          <div className={`flex items-start gap-4 transition-opacity duration-500 ${checkoutStep >= 3 || checkoutStep === -1 ? 'opacity-100' : 'opacity-0 hidden'}`}>
+                            <div className="mt-0.5 relative z-10 flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-600 shrink-0">
+                              {checkoutStep > 3 || checkoutStep === -1 ? <Check className="w-3 h-3" /> : <RefreshCw className="w-3 h-3 animate-spin" />}
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <span className={`font-semibold ${checkoutStep >= 3 ? 'text-slate-900' : 'text-slate-400'}`}>Generating dynamic layout</span>
+                              {checkoutStep === 3 && <span className="text-slate-500 text-[11px]">Orchestrating AI models for copy & assets...</span>}
+                            </div>
+                          </div>
+
+                          {/* Step 4 */}
+                          <div className={`flex items-start gap-4 transition-opacity duration-500 ${checkoutStep >= 4 || checkoutStep === -1 ? 'opacity-100' : 'opacity-0 hidden'}`}>
+                            <div className="mt-0.5 relative z-10 flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-600 shrink-0">
+                              {checkoutStep > 4 || checkoutStep === 5 ? <Check className="w-3 h-3" /> : (checkoutStep === 4 ? <RefreshCw className="w-3 h-3 animate-spin" /> : <div className="w-2 h-2 rounded-full bg-slate-300"></div>)}
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <span className={`font-semibold ${checkoutStep >= 4 ? 'text-slate-900' : 'text-slate-400'}`}>Deploying to edge</span>
+                              {checkoutStep === 4 && <span className="text-slate-500 text-[11px]">Provisioning client dashboard...</span>}
+                              {checkoutStep === 5 && <span className="text-emerald-600 font-semibold text-[11px]">Dashboard successfully provisioned! Redirecting...</span>}
+                            </div>
+                          </div>
+                          
+                          {/* Error State */}
+                          {checkoutStep === -1 && (
+                            <div className="mt-2 p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-start gap-2">
+                              <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                              <div className="text-rose-600 font-sans text-xs">
+                                <strong>Checkout Failed:</strong> {checkoutLog[checkoutLog.length - 1]?.replace('[ERROR] ', '')}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
 
                     {/* Webhook target info */}
-                    <div className="bg-slate-950 p-3 border border-slate-850 flex items-center gap-3 text-xs">
-                      <div className="text-slate-400">⚡</div>
+                    <div className="bg-slate-50 p-3 border border-slate-850 flex items-center gap-3 text-xs">
+                      <div className="text-slate-500">⚡</div>
                       <div>
-                        <span className="text-[10px] font-mono text-slate-500 uppercase block leading-none">
+                        <span className="text-xs font-sans text-slate-500 block leading-none">
                           Webhook Listener
                         </span>
-                        <span className="font-mono text-[11px] text-emerald-400">
+                        <span className="font-sans text-xs text-blue-600">
                           POST /api/webhooks/paypal
                         </span>
                       </div>
@@ -1340,57 +1417,57 @@ exports.weatherWebmasterPipeline = async (req, res) => {
 
         {/* Right Side: Interactive "Active Copwriting Preview" Card */}
         <div className="lg:col-span-4 flex flex-col gap-6">
-          <div className="bg-[#020617] border border-[#334155] p-5 sticky top-24 flex flex-col gap-4 rounded-none">
+          <div className="bg-white border border-slate-300 shadow-sm p-5 sticky top-24 flex flex-col gap-4 rounded-lg">
             
             {/* Header */}
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <Globe className="w-4 h-4 text-emerald-400" />
-                <span className="label-mono font-semibold text-slate-400">Live Website Monitor</span>
+                <Globe className="w-4 h-4 text-blue-600" />
+                <span className="text-xs font-semibold tracking-wider text-slate-500">Live Website Monitor</span>
               </div>
-              <h2 className="text-sm font-semibold uppercase tracking-tight text-slate-200">Active Weather Adaptive Preview</h2>
+              <h2 className="text-sm font-semibold tracking-tight text-slate-800">Active Weather Adaptive Preview</h2>
             </div>
 
             {/* Selector/Fallback */}
             {selectedClient ? (
               <div className="flex flex-col gap-4">
                 {/* Micro Meta-info */}
-                <div className="bg-slate-950 border border-slate-800 rounded-none p-3 text-xs font-mono">
+                <div className="bg-slate-50 border border-slate-200 shadow-sm rounded-lg p-3 text-xs font-sans">
                   <div className="flex justify-between mb-1.5">
                     <span className="text-slate-500">Domain ID:</span>
-                    <span className="text-emerald-400 font-semibold">{selectedClient.domain}</span>
+                    <span className="text-blue-600 font-semibold">{selectedClient.domain}</span>
                   </div>
                   <div className="flex justify-between mb-1.5">
                     <span className="text-slate-500">Territory:</span>
-                    <span className="text-slate-300">{selectedClient.city}</span>
+                    <span className="text-slate-700">{selectedClient.city}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Cache Status:</span>
-                    <span className="text-emerald-400 font-semibold">Active ISR</span>
+                    <span className="text-blue-600 font-semibold">Active ISR</span>
                   </div>
                   {selectedClient.lastUpdated && (
-                    <div className="flex justify-between border-t border-slate-800 pt-1.5 mt-1.5 text-[10px]">
+                    <div className="flex justify-between border-t border-slate-200 pt-1.5 mt-1.5 text-xs">
                       <span className="text-slate-600">Last Sync:</span>
-                      <span className="text-slate-400">{new Date(selectedClient.lastUpdated).toLocaleTimeString()}</span>
+                      <span className="text-slate-500">{new Date(selectedClient.lastUpdated).toLocaleTimeString()}</span>
                     </div>
                   )}
                 </div>
 
                 {/* The "Living Website" SSR Iframe Viewer */}
-                <div className="border border-[#334155] rounded-none overflow-hidden bg-white text-slate-900 shadow-inner flex flex-col h-[520px]">
+                <div className="border border-slate-200 shadow-sm rounded-lg overflow-hidden bg-white text-slate-900 shadow-inner flex flex-col h-[520px]">
                   
                   {/* Header bar representing the browser */}
-                  <div className="bg-slate-100 border-b border-slate-200 px-3 py-1.5 flex items-center gap-1.5 text-[10px] text-slate-400 font-mono select-none rounded-none shrink-0">
+                  <div className="bg-slate-100 border-b border-slate-200 px-3 py-1.5 flex items-center gap-1.5 text-xs text-slate-500 font-sans select-none rounded-lg shrink-0">
                     <span className="w-2.5 h-2.5 rounded-full bg-rose-400 shrink-0"></span>
                     <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shrink-0"></span>
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0"></span>
-                    <span className="bg-white px-3 py-0.5 rounded-none border border-slate-200 text-center flex-1 truncate text-slate-500 font-mono flex items-center justify-between">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0"></span>
+                    <span className="bg-white px-3 py-0.5 rounded-lg border border-slate-200 shadow-sm text-center flex-1 truncate text-slate-500 font-sans flex items-center justify-between">
                       <span>https://{selectedClient.domain}</span>
                       <a 
                         href={`/site/${selectedClient.domain}`} 
                         target="_blank" 
                         rel="noopener noreferrer" 
-                        className="text-emerald-500 hover:text-emerald-600 ml-2 uppercase text-[9px] font-bold tracking-wider"
+                        className="text-blue-600 hover:text-emerald-600 ml-2 text-[10px] font-bold tracking-wider"
                       >
                         Open Site &nearr;
                       </a>
@@ -1407,7 +1484,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                 </div>
               </div>
             ) : (
-              <div className="border border-slate-800 border-dashed rounded-none p-10 text-center text-slate-500 text-xs font-mono">
+              <div className="border border-slate-200 shadow-sm border-dashed rounded-lg p-10 text-center text-slate-500 text-xs font-sans">
                 No client selected. Choose one from the list to preview their live weather-adaptive website.
               </div>
             )}

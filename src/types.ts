@@ -18,8 +18,9 @@ export interface HVACClient {
   businessName: string;
   city: string;
   phone: string;
-  isrUrl: string;
-  isrSecret: string;
+  isrUrl?: string;
+  isrSecret?: string;
+  createdAt?: string;
   vertical?: string; // e.g. "Roofing", "HVAC", "Plumbing", "Solar", "Pool Maintenance"
   trigger_type?: string; // e.g. "Meteorological_Anomalies", "Thermal_Thresholds", "Precipitation_Spikes", "Storm_Surges"
   primary_triggers?: string[]; // e.g. ["wind_speed > 35", "hail_probability > 50"]

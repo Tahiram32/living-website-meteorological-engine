@@ -8,11 +8,12 @@
 
 @layer utilities {
   .label-mono {
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-size: 0.65rem;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: #94a3b8;
+    letter-spacing: 0.05em;
+    color: #64748b;
   }
   
   .metric-val {
@@ -23,12 +24,12 @@
   }
   
   .border-accent {
-    border-color: #334155;
+    border-color: #e2e8f0;
   }
 }
 
 body {
   font-family: 'Inter', sans-serif;
-  background-color: #020617;
-  color: #f8fafc;
+  background-color: #f8fafc;
+  color: #0f172a;
 }
