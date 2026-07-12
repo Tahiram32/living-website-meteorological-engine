@@ -20,8 +20,25 @@ export interface HVACClient {
   phone: string;
   isrUrl: string;
   isrSecret: string;
+  vertical?: string; // e.g. "Roofing", "HVAC", "Plumbing", "Solar", "Pool Maintenance"
+  trigger_type?: string; // e.g. "Meteorological_Anomalies", "Thermal_Thresholds", "Precipitation_Spikes", "Storm_Surges"
+  primary_triggers?: string[]; // e.g. ["wind_speed > 35", "hail_probability > 50"]
+  emergencyCopyFocus?: string; // e.g. "Emergency tarping and hail damage repairs"
+  themeColor?: string; // e.g. "blue", "emerald", "amber", "red", "cyan", "slate", "purple", "orange"
+  icon?: string; // e.g. "wind", "droplets", "thermometer", "sun", "snowflake", "shield", "home", "wrench"
   lastUpdated?: string;
   lastWeatherCopy?: WeatherCopy;
+  lastTelemetry?: {
+    temp: number;
+    condition: string;
+    humidity: number;
+    wind_speed?: number;
+    precipitation?: number;
+    hail_probability?: number;
+    isExtreme: boolean;
+    isTriggerFired?: boolean;
+    source?: string;
+  };
 }
 
 export interface WeatherMetrics {

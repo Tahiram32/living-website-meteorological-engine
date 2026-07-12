@@ -29,6 +29,54 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Rule Evaluation Engine for weather triggers
+export function evaluateTriggers(triggers: string[], weather: any): boolean {
+  if (!triggers || !Array.isArray(triggers) || triggers.length === 0) return false;
+  
+  // Strict whitelists to ensure 100% sandboxed execution and block security anomalies
+  const allowedFields = new Set(["temp", "humidity", "wind_speed", "precipitation", "hail_probability"]);
+  const allowedOperators = new Set([">", ">=", "<", "<=", "==", "="]);
+
+  for (const trigger of triggers) {
+    try {
+      const parts = trigger.trim().split(/\s+/);
+      if (parts.length < 3) continue;
+      
+      const field = parts[0].trim();
+      const operator = parts[1].trim();
+      const rawValue = parts[2].trim();
+      
+      // 1. Strict Structural Audit: Deny non-whitelisted fields & non-whitelisted operators
+      if (!allowedFields.has(field)) {
+        console.warn(`[SECURITY WARN] Blocked execution of non-whitelisted trigger field: '${field}'`);
+        continue;
+      }
+      if (!allowedOperators.has(operator)) {
+        console.warn(`[SECURITY WARN] Blocked execution of non-whitelisted trigger operator: '${operator}'`);
+        continue;
+      }
+      
+      const value = parseFloat(rawValue);
+      const weatherVal = parseFloat(weather[field]);
+      if (isNaN(weatherVal) || isNaN(value)) continue;
+      
+      let matched = false;
+      if (operator === ">") matched = weatherVal > value;
+      else if (operator === ">=") matched = weatherVal >= value;
+      else if (operator === "<") matched = weatherVal < value;
+      else if (operator === "<=") matched = weatherVal <= value;
+      else if (operator === "==" || operator === "=") matched = weatherVal === value;
+      
+      if (matched) {
+        return true; // Fired!
+      }
+    } catch (e) {
+      console.error(`Error parsing trigger rule "${trigger}":`, e);
+    }
+  }
+  return false;
+}
+
 // Read Firebase Config
 let firebaseConfig: any = {};
 try {
@@ -770,26 +818,22 @@ export async function createDeadLetterAlert(domain: string, error: any, runLogRe
  * Computes highly accurate, domain-tailored meteorological landing page copies on failure of external AI APIs.
  */
 export function generateLocalCopyFallback(weather: any, client: any): any {
-  const isHot = weather.temp >= 85;
-  const isCold = weather.temp <= 45;
-
-  let hTitle = `Keep Your Home Comfortable: Professional cooling by ${client.businessName}`;
+  const vertical = client.vertical || "HVAC";
+  const emergencyFocus = client.emergencyCopyFocus || "Emergency weather services";
+  const isExtreme = !!weather.isExtreme;
+  
+  let hTitle = `${client.businessName}: Expert ${vertical} Services in ${client.city}`;
   let hSub = `Same-day scheduling and emergency dispatch available in ${client.city}. Call ${client.phone} now.`;
   let alertText = "";
-  let sHeading = `How Humidity Affects Your AC Performance in ${client.city}`;
-  let sArticle = `As humidity levels shift, residential systems work double-duty to both cool the atmosphere and dry the indoor airflow. High moisture builds condenser friction and reduces motor efficiency. Trust local experts at ${client.businessName} to optimize your cooling flow.`;
-  let promoList = ["$49 Professional Precision Tune-Up", "Free Condensate Clear with AC Tune-up"];
+  let sHeading = `Reliable ${vertical} for Any Weather in ${client.city}`;
+  let sArticle = `At ${client.businessName}, we specialize in delivering professional, dependable ${vertical.toLowerCase()} solutions tailored to the unique climate challenges of ${client.city}. Our team of skilled experts is on-call 24/7 to safeguard your home and business against unexpected shifts in temperature, humidity, and atmospheric conditions. From routine preventative maintenance to immediate emergency support, trust us to protect your property and keep your systems running at peak performance. Fully licensed, insured, and locally trusted.`;
+  let promoList = [`$50 Initial Dispatch Discount`, `Free Multi-Point Professional Inspection`];
 
-  if (isHot) {
-    hTitle = `Scorching ${weather.temp}°F ${client.city} Heat: Same-Day Cooling dispatch from ${client.businessName}!`;
-    hSub = `Beat the severe humidity and keep your house dry and ice-cold. Emergency AC repair on standby: Call ${client.phone}.`;
-    alertText = `HEAT ADVISORY ACTIVE: Rapid response technicians dispatched in ${client.city} county.`;
-    promoList = ["$39 Rapid Diagnostic Dispatch", "Free AC Filter Upgrade"];
-  } else if (isCold) {
-    hTitle = `Severe Cold Alert in ${client.city}: Keep Warm with ${client.businessName}`;
-    hSub = `Failing furnace? Pipes freezing? Talk to a live HVAC technician now at ${client.phone}.`;
-    alertText = `WINTER WARNING: Priority heating dispatch is active. Call for emergency support.`;
-    promoList = ["$49 Furnace Safety Diagnostic", "$500 Off High-Efficiency Replacements"];
+  if (isExtreme) {
+    hTitle = `URGENT ALERT: Emergency ${vertical} Dispatch from ${client.businessName}!`;
+    hSub = `Severe meteorological conditions active in ${client.city}. Call dispatch at ${client.phone} for immediate assistance: ${emergencyFocus}.`;
+    alertText = `⚠️ WEATHER ALERT ACTIVE: Priority dispatch is online for local families and businesses.`;
+    promoList = [`$39 Emergency Diagnostic Dispatch`, `Priority Dispatch Access`];
   }
 
   return {
@@ -799,7 +843,7 @@ export function generateLocalCopyFallback(weather: any, client: any): any {
     seoHeading: sHeading,
     seoArticle: sArticle,
     promotions: promoList,
-    cacheTags: ["weather-update", "homepage"]
+    cacheTags: ["weather-update", "homepage", vertical.toLowerCase()]
   };
 }
 
@@ -820,25 +864,36 @@ export async function executeSingleClientSyncTask(domain: string, weather: any, 
 
     if (hasRealApiKey) {
       try {
+        const vertical = client.vertical || "HVAC";
+        const triggerType = client.trigger_type || "Thermal_Thresholds";
+        const emergencyFocus = client.emergencyCopyFocus || "Emergency weather dispatch diagnostic tune-ups";
+        const primaryTriggersStr = Array.isArray(client.primary_triggers) ? client.primary_triggers.join(", ") : "temp >= 95, temp <= 32";
+
         const prompt = `
-          As "The Living Website" autonomous AI Webmaster, analyze the weather in ${client.city} and mutate the landing page copy for "${client.businessName}".
+          As "The Living Website" autonomous AI Webmaster, analyze the current meteorological environment and mutate the landing page copy for "${client.businessName}", operating in the "${vertical}" vertical.
           
           Current Metrics:
           - Temperature: ${weather.temp}°F
           - Humidity: ${weather.humidity}%
           - Conditions: ${weather.condition}
+          - Wind Speed: ${weather.wind_speed || 10} mph
+          - Precipitation: ${weather.precipitation || 0} inches
           - Extreme Alert Active: ${weather.isExtreme ? "YES (Priority Dispatch Alert Required)" : "NO"}
           - Feed Source: ${weather.source}
           
-          Brand Details:
+          Brand and Operations Profile:
           - Brand Name: "${client.businessName}"
+          - Industry Vertical: "${vertical}"
+          - Trigger Category: "${triggerType}"
+          - Monitored Conditions: "${primaryTriggersStr}"
+          - Emergency Advertising Focus: "${emergencyFocus}"
           - Service Area: ${client.city}
           - Dispatch Phone: ${client.phone}
           
           Requirements:
-          1. If Extreme Weather is true, make the heroTitle and alertBanner intense and immediate (preventing AC breakdown, frozen lines, or furnace lockout).
-          2. Keep promotions realistic and centered around tune-ups, filter swaps, and capacitor diagnostics.
-          3. Write a high-quality educational seoArticle of exactly 120-150 words that integrates SEO keywords organically.
+          1. If Extreme Weather is true OR if any of the Monitored Conditions are met, make the heroTitle and alertBanner intense, immediate, and direct. Target the copy specifically to the "${vertical}" vertical, addressing "${emergencyFocus}" to convert concerned visitors into immediate bookings.
+          2. Keep promotions highly realistic, practical, and customized for a local "${vertical}" business.
+          3. Write a premium, high-converting educational seoArticle of exactly 120-150 words that integrates both weather conditions and "${vertical}"-specific SEO keywords organically.
         `;
 
         const result = await generateContentWithRetry(ai, {
@@ -863,17 +918,17 @@ export async function executeSingleClientSyncTask(domain: string, weather: any, 
 
         // Enforce robust schema defaults to handle potential missing attributes defensively
         updatedCopy = {
-          heroTitle: parsed.heroTitle || `Keep Your Home Comfortable: Professional cooling by ${client.businessName}`,
+          heroTitle: parsed.heroTitle || `${client.businessName}: Premium ${vertical} in ${client.city}`,
           heroSubtitle: parsed.heroSubtitle || `Same-day scheduling and emergency dispatch available in ${client.city}. Call ${client.phone} now.`,
           alertBanner: parsed.alertBanner || "",
-          seoHeading: parsed.seoHeading || `How Humidity Affects Your AC Performance in ${client.city}`,
-          seoArticle: parsed.seoArticle || `As humidity levels shift, residential systems work double-duty to both cool the atmosphere and dry the indoor airflow. High moisture builds condenser friction and reduces motor efficiency. Trust local experts at ${client.businessName} to optimize your cooling flow.`,
+          seoHeading: parsed.seoHeading || `Weather-Adaptive ${vertical} Solutions in ${client.city}`,
+          seoArticle: parsed.seoArticle || `At ${client.businessName}, we provide professional ${vertical.toLowerCase()} diagnostics. Trust our licensed local specialists to protect your home.`,
           promotions: Array.isArray(parsed.promotions) && parsed.promotions.length > 0 
             ? parsed.promotions 
-            : ["$49 Professional Precision Tune-Up", "Free Condensate Clear with AC Tune-up"],
+            : ["$50 Initial Dispatch Discount", "Free Professional Property Checkup"],
           cacheTags: Array.isArray(parsed.cacheTags) && parsed.cacheTags.length > 0
             ? parsed.cacheTags
-            : ["weather-update", "homepage"]
+            : ["weather-update", "homepage", vertical.toLowerCase()]
         };
       } catch (geminiError: any) {
         console.error(`🚨 [AI-MUTATION-FAILED] Gemini API generation or validation contract failed: ${geminiError.message}. Halting update to preserve last known good state and activate Dead-Letter monitoring logs.`);
@@ -883,6 +938,8 @@ export async function executeSingleClientSyncTask(domain: string, weather: any, 
       updatedCopy = generateLocalCopyFallback(weather, client);
     }
 
+    const isTriggerFired = evaluateTriggers(client.primary_triggers, weather);
+
     // Mutate client doc in Firestore
     await clientDocRef.update({
       lastWeatherCopy: updatedCopy,
@@ -891,8 +948,12 @@ export async function executeSingleClientSyncTask(domain: string, weather: any, 
         temp: weather.temp,
         condition: weather.condition,
         humidity: weather.humidity,
+        wind_speed: weather.wind_speed || 10,
+        precipitation: weather.precipitation || 0,
+        hail_probability: weather.hail_probability || 0,
         source: weather.source,
-        isExtreme: !!weather.isExtreme
+        isExtreme: !!weather.isExtreme,
+        isTriggerFired: isTriggerFired
       }
     });
 

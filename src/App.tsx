@@ -52,8 +52,9 @@ export default function App() {
   const [submitError, setSubmitError] = useState("");
 
   // PayPal Checkout Form States
-  const [checkoutDomain, setCheckoutDomain] = useState("gulfstreamac.com");
   const [checkoutName, setCheckoutName] = useState("Gulf Stream AC & Heating");
+  const [checkoutZipCode, setCheckoutZipCode] = useState("75201");
+  const [checkoutDomain, setCheckoutDomain] = useState("gulfstreamac.com");
   const [checkoutCity, setCheckoutCity] = useState("Dallas");
   const [checkoutPhone, setCheckoutPhone] = useState("(214) 555-0199");
   const [isSubmittingCheckout, setIsSubmittingCheckout] = useState(false);
@@ -214,10 +215,8 @@ export default function App() {
           event_type: "BILLING.SUBSCRIPTION.ACTIVATED",
           resource: {
             custom_id: JSON.stringify({
-              domain: checkoutDomain,
               businessName: checkoutName,
-              city: checkoutCity,
-              phone: checkoutPhone
+              zipCode: checkoutZipCode
             })
           }
         })
@@ -228,17 +227,25 @@ export default function App() {
       }
 
       const data = await res.json();
+      const resolvedDomain = data.client?.domain || `${checkoutName.toLowerCase().replace(/\s+/g, "")}.livingwebsiteos.com`;
+      const resolvedVertical = data.client?.vertical || "HVAC";
+      const resolvedCity = data.client?.city || "Dallas, TX";
+      
       await addLogLine(`[SERVER RESPONSE] Status: ${res.status} OK. Verification: ${JSON.stringify(data.status)}`, 300);
-      await addLogLine(`[SERVER SUCCESS] Multi-tenant document for '${checkoutDomain}' provisioned successfully in Firestore!`, 400);
+      await addLogLine(`[SERVER SUCCESS] Multi-tenant document for '${resolvedDomain}' provisioned successfully!`, 400);
+      await addLogLine(`[GEMINI ENGINE] Resolved Vertical: "${resolvedVertical}"`, 200);
+      await addLogLine(`[GEMINI ENGINE] Resolved Territory City: "${resolvedCity}"`, 200);
+      await addLogLine(`[GEMINI ENGINE] Assigned Visual Theme: "${data.client?.themeColor || 'blue'}" | Icon: "${data.client?.icon || 'snowflake'}"`, 200);
+      await addLogLine(`[GEMINI ENGINE] Target Meteorological Triggers: [${(data.client?.primary_triggers || []).join(', ')}]`, 200);
       
       // Edge hydration logs to illustrate the solved KV propagation race condition
       await addLogLine(`[HYBRID RESOLUTION] Triggering edge-cache validation cycle...`, 300);
-      await addLogLine(`[EDGE REPLICATION] Simulating first client request to edge domain '${checkoutDomain}'...`, 400);
-      await addLogLine(`[KV CACHE MISS] Cloudflare KV: Cache miss for '${checkoutDomain}' due to eventual consistency re-propagation latency.`, 500);
+      await addLogLine(`[EDGE REPLICATION] Simulating first client request to edge domain '${resolvedDomain}'...`, 400);
+      await addLogLine(`[KV CACHE MISS] Cloudflare KV: Cache miss for '${resolvedDomain}' due to eventual consistency re-propagation latency.`, 500);
       await addLogLine(`[EDGE RESOLUTION] Fallback Rest: Edge worker seamlessly routed query to core registrar REST API... Resolved!`, 400);
-      await addLogLine(`[EDGE REPLICATION] Site rendered synchronously at the serverless edge. Performance: 38ms (X-Edge-Fallback-Resolved: true).`, 300);
+      await addLogLine(`[EDGE REPLICATION] Site rendered synchronously at the serverless edge. Performance: 42ms (X-Edge-Fallback-Resolved: true).`, 300);
       await addLogLine(`[EDGE HYDRATION] Background job triggered: Asynchronously hydrated Edge KV cache with client records.`, 400);
-      await addLogLine(`[KV CACHE HIT] Future client loads for '${checkoutDomain}' will serve in <10ms directly from Edge-replicated KV memory!`, 300);
+      await addLogLine(`[KV CACHE HIT] Future client loads for '${resolvedDomain}' will serve in <10ms directly from Edge-replicated KV memory!`, 300);
       await addLogLine(`[FIRESTORE ACTION] Real-time snapshot listener triggered. Active tenant list updated. Onboarding complete!`, 300);
     } catch (err: any) {
       setCheckoutLog((prev) => [...prev, `[ERROR] Failed to post checkout event: ${err.message || err}`]);
@@ -524,37 +531,37 @@ exports.weatherWebmasterPipeline = async (req, res) => {
           <div className="w-8 h-8 bg-emerald-500 rounded-sm flex items-center justify-center">
             <Cpu className="w-4 h-4 text-slate-950" />
           </div>
-          <span className="font-bold tracking-tighter text-xl text-white">
-            THE LIVING WEBSITE <span className="text-emerald-500">OS</span>
+          <span className="font-bold tracking-tight text-xl text-white">
+            Living Website <span className="text-emerald-400 font-mono">Engine</span>
           </span>
         </div>
 
         {/* Status Indicators */}
         <div className="flex gap-8 items-center">
           <div className="hidden md:flex flex-col">
-            <span className="label-mono">ENVIRONMENT</span>
-            <span className="text-xs font-semibold text-slate-200">PRODUCTION_V1.0.4</span>
+            <span className="label-mono font-semibold text-slate-400">MODE</span>
+            <span className="text-xs font-semibold text-slate-200">Production</span>
           </div>
           <div className="hidden md:flex flex-col">
-            <span className="label-mono">XPRIZE_TRACK</span>
-            <span className="text-xs font-semibold text-slate-200">BUILD_WITH_GEMINI</span>
+            <span className="label-mono font-semibold text-slate-400">AI ASSISTANT</span>
+            <span className="text-xs font-semibold text-slate-200">Gemini 1.5 Flash</span>
           </div>
           <div className="flex flex-col">
-            <span className="label-mono">INTELLIGENCE</span>
+            <span className="label-mono font-semibold text-slate-400">API STATUS</span>
             <div className="flex items-center gap-1.5 mt-0.5">
               {hasRealApiKey ? (
                 <span className="text-[10px] bg-sky-500/10 border border-sky-500/30 rounded px-2 py-0.5 text-sky-400 font-bold uppercase">
-                  GEMINI_CONNECTED
+                  Connected
                 </span>
               ) : (
                 <span className="text-[10px] bg-amber-500/10 border border-amber-500/30 rounded px-2 py-0.5 text-amber-500 font-bold uppercase">
-                  LOCAL_SANDBOX
+                  Local Sandbox
                 </span>
               )}
             </div>
           </div>
-          <div className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded text-emerald-500 text-xs font-bold font-mono tracking-wider">
-            SYSTEM_HEALTH: NOMINAL
+          <div className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded text-emerald-400 text-xs font-semibold">
+            System Online
           </div>
         </div>
       </header>      {/* 2. Main Workspace Layout */}
@@ -574,7 +581,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
               }`}
             >
               <Terminal className="w-4 h-4" />
-              CONSOLE_RUNNER
+              Campaign Console
             </button>
             <button
               onClick={() => setActiveTab("tenants")}
@@ -585,7 +592,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
               }`}
             >
               <Database className="w-4 h-4" />
-              TENANT_REGISTRAR ({clients.length})
+              Client Directory ({clients.length})
             </button>
             <button
               onClick={() => setActiveTab("billing")}
@@ -596,7 +603,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
               }`}
             >
               <Sparkles className="w-4 h-4" />
-              PAYPAL_PORTAL
+              PayPal Portal
             </button>
           </div>
 
@@ -607,29 +614,29 @@ exports.weatherWebmasterPipeline = async (req, res) => {
               {/* Launcher Card - 7 cols */}
               <div className="md:col-span-7 bg-[#020617] border border-[#334155] p-5 flex flex-col justify-between">
                 <div>
-                  <span className="label-mono">INTELLIGENCE LAYER PIPELINE</span>
+                  <span className="label-mono font-semibold text-slate-400">Automatic Copy Optimizer</span>
                   <h2 className="text-sm font-semibold text-slate-200 mt-1 mb-3 uppercase tracking-tight">
-                    Atmospheric Sync OS Control
+                    Weather-Adaptive Content Control
                   </h2>
                   <p className="text-xs text-slate-400 mb-4 leading-relaxed">
-                    Trigger or simulate the autonomous meteorological sync engines. Select either single-city sequential tuning or dispatch a full fleet-wide weather cron via decoupled task workers.
+                    Automatically tailor your landing pages to live weather conditions. Run a test for a single city or sync your entire fleet of clients to update their sites based on current temperatures, humidity, and storm events.
                   </p>
                 </div>
 
                 <div className="flex flex-col gap-5 border-t border-slate-800 pt-4">
                   {/* Action Group 1: Single City */}
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-500 font-mono tracking-wider block mb-2">
-                      1. Single-Territory Simulation
+                    <span className="text-[10px] uppercase font-bold text-slate-400 font-mono tracking-wider block mb-2">
+                      1. Run a Single-City Test
                     </span>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <select
                         value={selectedCity}
                         onChange={(e) => {
                           setSelectedCity(e.target.value);
                           if (e.target.value !== "custom") setCustomCity("");
                         }}
-                        className="flex-1 bg-[#020617] border border-[#334155] px-4 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-mono rounded-none"
+                        className="w-full sm:flex-1 bg-[#020617] border border-[#334155] px-4 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-mono rounded-none min-w-0"
                         disabled={isPolling}
                       >
                         <option value="Dallas">Dallas, TX</option>
@@ -645,7 +652,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                           placeholder="E.g., Las Vegas"
                           value={customCity}
                           onChange={(e) => setCustomCity(e.target.value)}
-                          className="flex-1 bg-[#020617] border border-[#334155] px-4 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-mono rounded-none"
+                          className="w-full sm:flex-1 bg-[#020617] border border-[#334155] px-4 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-mono rounded-none"
                           disabled={isPolling}
                         />
                       )}
@@ -653,17 +660,17 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                       <button
                         onClick={() => triggerPipeline(selectedCity === "custom" ? customCity : selectedCity)}
                         disabled={isPolling || (selectedCity === "custom" && !customCity)}
-                        className="bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-bold font-mono text-[10px] px-4 py-2 rounded-none flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed transition-all uppercase tracking-wider whitespace-nowrap"
+                        className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-bold font-mono text-[10px] px-4 py-2 rounded-none flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed transition-all uppercase tracking-wider whitespace-nowrap"
                       >
                         {isPolling ? (
                           <>
                             <RefreshCw className="w-3 h-3 animate-spin text-slate-950" />
-                            TUNING...
+                            Tuning...
                           </>
                         ) : (
                           <>
                             <Play className="w-3 h-3 fill-current text-slate-950" />
-                            RUN CITY
+                            Run Weather Sync
                           </>
                         )}
                       </button>
@@ -672,14 +679,14 @@ exports.weatherWebmasterPipeline = async (req, res) => {
 
                   {/* Action Group 2: Full Fleet Weather Cron */}
                   <div className="border-t border-slate-800/60 pt-4">
-                    <span className="text-[10px] uppercase font-bold text-slate-500 font-mono tracking-wider block mb-2">
-                      2. Fleet-Wide Meteorological Sync Cron
+                    <span className="text-[10px] uppercase font-bold text-slate-400 font-mono tracking-wider block mb-2">
+                      2. Sync All Clients (Fleet-wide)
                     </span>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <select
                         value={queueMode}
                         onChange={(e) => setQueueMode(e.target.value as any)}
-                        className="flex-1 bg-[#020617] border border-[#334155] px-4 py-2 text-xs text-slate-200 focus:outline-none focus:border-sky-500 font-mono rounded-none"
+                        className="w-full sm:flex-1 bg-[#020617] border border-[#334155] px-4 py-2 text-xs text-slate-200 focus:outline-none focus:border-sky-500 font-mono rounded-none min-w-0"
                         disabled={isPolling}
                       >
                         <option value="simulated">Local Simulated Queue (100% Free - No GCP Setup)</option>
@@ -691,7 +698,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                       <button
                         onClick={() => triggerMeteorologicalSync(queueMode)}
                         disabled={isPolling || queueMode === "github-actions"}
-                        className={`font-bold font-mono text-[10px] px-4 py-2 rounded-none flex items-center justify-center gap-1.5 transition-all uppercase tracking-wider whitespace-nowrap ${
+                        className={`w-full sm:w-auto font-bold font-mono text-[10px] px-4 py-2 rounded-none flex items-center justify-center gap-1.5 transition-all uppercase tracking-wider whitespace-nowrap ${
                           queueMode === "github-actions"
                             ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-[#334155]"
                             : "bg-sky-500 hover:bg-sky-400 text-slate-950 cursor-pointer"
@@ -700,17 +707,17 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                         {isPolling ? (
                           <>
                             <RefreshCw className="w-3 h-3 animate-spin" />
-                            QUEUING...
+                            Queuing...
                           </>
                         ) : queueMode === "github-actions" ? (
                           <>
                             <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                            EXTERNAL cron ACTIVE
+                            External Cron Active
                           </>
                         ) : (
                           <>
                             <Activity className="w-3 h-3" />
-                            FIRE CRON
+                            Sync All Clients
                           </>
                         )}
                       </button>
@@ -731,20 +738,20 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                           </li>
                           <li className="flex flex-col gap-0.5">
                             <span className="text-white font-bold font-mono">2. APP_BASE_URL</span>
-                            <span className="text-slate-500">Your Cloud Run base address (e.g., <code className="text-sky-300">https://ais-dev-w6dhqyrlptmb73l7wgszu7-35755336409.us-east1.run.app</code>).</span>
+                            <span className="text-slate-500">Your Cloud Run base address (e.g., <code className="text-sky-300">https://your-app-url.com</code>).</span>
                           </li>
                           <li className="flex flex-col gap-0.5">
                             <span className="text-white font-bold font-mono">3. TASK_WORKER_SECRET</span>
-                            <span className="text-slate-500">A secure secret token matching your server env. Default is <code className="text-amber-400">sec_default_task_secret</code> to shield the mutation endpoint.</span>
+                            <span className="text-slate-500">A secure secret token matching your server env to shield the mutation endpoint.</span>
                           </li>
                         </ul>
                         <div className="bg-emerald-500/10 border-l-2 border-emerald-500 p-2.5 text-[10px] text-emerald-300 leading-relaxed">
-                          ⚡ <strong className="text-white">How it works:</strong> The GitHub workflow runs twice daily on GitHub's infrastructure. It fetches clients, resolves weather, and hits Cloud Run sequentially for one single tenant at a time. No CPU throttling, no OOM errors, 100% free.
+                          ⚡ <strong>How it works:</strong> The GitHub workflow runs twice daily on GitHub's infrastructure. It fetches clients, resolves weather, and updates landing pages sequentially for each client.
                         </div>
                       </div>
                     ) : (
                       <p className="text-[9px] text-slate-500 font-mono mt-2 leading-relaxed">
-                        * Local Simulated mode is <span className="text-emerald-400 font-bold">100% free with no Google Cloud account or billing required</span>, spawning background microtask workers instantly. Completely eliminates timeouts.
+                        * Local Simulated mode is <span className="text-emerald-400 font-bold">100% free with no Google Cloud account required</span>, spawning background task workers instantly.
                       </p>
                     )}
                   </div>
@@ -754,14 +761,14 @@ exports.weatherWebmasterPipeline = async (req, res) => {
               {/* Gemini & Capacity block - 5 cols */}
               <div className="md:col-span-5 bg-[#020617] border border-[#334155] p-5 flex flex-col justify-between">
                 <div>
-                  <span className="label-mono">GEMINI_PRO_VISION_1.5</span>
+                  <span className="label-mono font-semibold text-slate-400">Gemini AI Engine Settings</span>
                   <div className="mt-2.5 p-3.5 bg-emerald-500/10 border-l-2 border-emerald-500 text-[11px] leading-relaxed text-emerald-100 font-mono">
-                    Response Schema: <span className="text-emerald-500 font-bold">STRICT_JSON_ENFORCED</span>. Native validation active. No regex filtering required.
+                    Strict JSON schema enforcement is active. The AI output is structured and validated automatically to ensure flawless landing page updates.
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-800">
                   <div className="flex flex-col">
-                    <span className="label-mono">QUEUE_CAPACITY</span>
+                    <span className="label-mono font-semibold text-slate-400">Queue Capacity</span>
                     <div className="flex items-end gap-1 mt-1">
                       <span className="metric-val text-white">98.4</span>
                       <span className="text-[10px] mb-1 text-slate-500 font-mono">%</span>
@@ -781,14 +788,14 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                   </div>
                   <div className="flex flex-col justify-between">
                     <div>
-                      <span className="label-mono">RATE_LIMIT_DELAY</span>
+                      <span className="label-mono font-semibold text-slate-400">Request Interval</span>
                       <div className="flex items-end gap-1 mt-0.5">
                         <span className="text-lg font-light font-mono text-white">1500</span>
                         <span className="text-[10px] text-slate-500 font-mono">MS</span>
                       </div>
                     </div>
                     <div>
-                      <span className="label-mono">WEATHER_API_LATENCY</span>
+                      <span className="label-mono font-semibold text-slate-400">Weather API Latency</span>
                       <div className="flex items-end gap-1 mt-0.5">
                         <span className="text-lg font-light font-mono text-white">42</span>
                         <span className="text-[10px] text-slate-500 font-mono">MS</span>
@@ -825,19 +832,19 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                 {activeRun && (
                   <div className="grid grid-cols-4 border-b border-slate-800 bg-slate-950/40 text-center text-xs font-mono py-2.5 text-slate-400">
                     <div className="border-r border-slate-800">
-                      <div className="text-[9px] text-slate-500 uppercase tracking-wider">TARGETS</div>
+                      <div className="text-[9px] text-slate-500 uppercase tracking-wider">Total Clients</div>
                       <div className="font-semibold text-slate-200 mt-0.5">{activeRun.totalClients} domains</div>
                     </div>
                     <div className="border-r border-slate-800">
-                      <div className="text-[9px] text-slate-500 uppercase tracking-wider">PROCESSED</div>
+                      <div className="text-[9px] text-slate-500 uppercase tracking-wider">Processed</div>
                       <div className="font-semibold text-sky-400 mt-0.5">{activeRun.processedClients}</div>
                     </div>
                     <div className="border-r border-slate-800">
-                      <div className="text-[9px] text-slate-500 uppercase tracking-wider">ISR SUCCESS</div>
+                      <div className="text-[9px] text-slate-500 uppercase tracking-wider">Revalidated</div>
                       <div className="font-semibold text-emerald-400 mt-0.5">{activeRun.successfulClients}</div>
                     </div>
                     <div>
-                      <div className="text-[9px] text-slate-500 uppercase tracking-wider">ISR BYPASS</div>
+                      <div className="text-[9px] text-slate-500 uppercase tracking-wider">Bypassed</div>
                       <div className="font-semibold text-amber-500 mt-0.5">{activeRun.failedClients}</div>
                     </div>
                   </div>
@@ -884,18 +891,18 @@ exports.weatherWebmasterPipeline = async (req, res) => {
 
               {/* Try/Catch Resiliency - 4 cols */}
               <div className="md:col-span-4 bg-[#020617] border border-[#334155] p-5 flex flex-col justify-between">
-                <span className="label-mono">DISTRIBUTED_RESILLIENCY</span>
+                <span className="label-mono font-semibold text-slate-400">System Reliability</span>
                 <div className="mt-4 grid grid-cols-2 gap-4 flex-1">
                   <div className="border border-slate-800 p-3 flex flex-col justify-between">
                     <div>
-                      <span className="text-[9px] uppercase font-bold text-slate-500 font-mono">Try/Catch Coverage</span>
+                      <span className="text-[9px] uppercase font-bold text-slate-500 font-mono">Error Coverage</span>
                       <div className="text-lg font-mono text-white mt-1">100%</div>
                     </div>
                     <div className="h-1 w-full bg-emerald-500 mt-2"></div>
                   </div>
                   <div className="border border-slate-800 p-3 flex flex-col justify-between">
                     <div>
-                      <span className="text-[9px] uppercase font-bold text-slate-500 font-mono">Batch Isolation</span>
+                      <span className="text-[9px] uppercase font-bold text-slate-500 font-mono">Client Protection</span>
                       <div className="text-lg font-mono text-white mt-1">ENABLED</div>
                     </div>
                     <div className="h-1 w-full bg-emerald-500 mt-2"></div>
@@ -906,15 +913,15 @@ exports.weatherWebmasterPipeline = async (req, res) => {
               {/* Analytics - 8 cols */}
               <div className="md:col-span-8 bg-[#020617] border border-[#334155] p-5 flex flex-col justify-between">
                 <div className="flex justify-between items-center mb-4">
-                  <span className="label-mono">WEATHER_MUTATION_ANALYTICS (LAST 12H)</span>
+                  <span className="label-mono font-semibold text-slate-400">Weather Sync Activity (Last 12 Hours)</span>
                   <div className="flex gap-4 font-mono text-[9px] text-slate-400">
                     <div className="flex items-center gap-1.5">
                       <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                      <span>TEMP_DATA</span>
+                      <span>Temperature Data</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                      <span>GEN_OUTPUT</span>
+                      <span>Generated Content</span>
                     </div>
                   </div>
                 </div>
@@ -939,12 +946,12 @@ exports.weatherWebmasterPipeline = async (req, res) => {
               {/* History Table - 12 cols */}
               <div className="md:col-span-12 bg-[#020617] border border-[#334155]">
                 <div className="px-5 py-3 border-b border-[#334155] flex items-center justify-between">
-                  <h3 className="label-mono">Job Execution History</h3>
-                  <span className="text-[10px] text-slate-500 font-mono">ALL_HISTORICAL_LOGS</span>
+                  <h3 className="label-mono font-semibold text-slate-400">Activity History</h3>
+                  <span className="text-[10px] text-slate-500 font-mono">Execution History Logs</span>
                 </div>
                 <div className="divide-y divide-slate-800 max-h-[180px] overflow-y-auto">
                   {runs.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-slate-600 font-mono">No historical pipelines have been cataloged.</div>
+                    <div className="p-4 text-center text-xs text-slate-500 font-mono">No historical sync tasks have run yet.</div>
                   ) : (
                     runs.map((r) => (
                       <div
@@ -991,10 +998,10 @@ exports.weatherWebmasterPipeline = async (req, res) => {
               <div className="bg-[#020617] border border-[#334155] p-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                   <div>
-                    <span className="label-mono">MULTI-TENANT REGISTRY</span>
-                    <h2 className="text-sm font-semibold text-slate-200 mt-1">FIRESTORE_FLEET_STATUS</h2>
+                    <span className="label-mono font-semibold text-slate-400">Client Directory</span>
+                    <h2 className="text-sm font-semibold text-slate-200 mt-1">Registered Client Domains</h2>
                     <p className="text-xs text-slate-400 mt-1 max-w-xl">
-                      Register and provision new HVAC corporate tenants. Document IDs map directly to client domains supporting Next.js multi-tenant edge middleware routing.
+                      Register and manage your clients' web domains. Adding a client here creates their custom dashboard, allowing the weather-adaptive system to dynamically tailor their landing pages.
                     </p>
                   </div>
                   <button
@@ -1002,7 +1009,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                     className="bg-slate-900 hover:bg-slate-800 text-slate-200 px-4 py-2 text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer border border-[#334155] rounded-none font-mono"
                   >
                     <Plus className={`w-3.5 h-3.5 transition-transform ${isAdding ? "rotate-45" : ""}`} />
-                    {isAdding ? "COLLAPSE_FORM" : "ADD_NEW_TENANT"}
+                    {isAdding ? "Close Form" : "Add New Client"}
                   </button>
                 </div>
 
@@ -1017,7 +1024,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                     )}
                     
                     <div>
-                      <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">Business Client Domain (Unique Doc ID) *</label>
+                      <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">Client Domain URL (e.g. hendersonhvac.com) *</label>
                       <input
                         type="text"
                         placeholder="E.g., hendersonhvac.com"
@@ -1029,7 +1036,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                     </div>
 
                     <div>
-                      <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">Business Trade Name *</label>
+                      <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">Business Name *</label>
                       <input
                         type="text"
                         placeholder="E.g., Henderson HVAC Services"
@@ -1041,7 +1048,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                     </div>
 
                     <div>
-                      <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">Service Territory City *</label>
+                      <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">Service City *</label>
                       <select
                         value={newClientCity}
                         onChange={(e) => setNewClientCity(e.target.value)}
@@ -1061,7 +1068,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                     </div>
 
                     <div>
-                      <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">Dispatcher Hotline Number *</label>
+                      <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">Phone Number / Hotline *</label>
                       <input
                         type="text"
                         placeholder="E.g., (214) 555-0192"
@@ -1073,7 +1080,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                     </div>
 
                     <div>
-                      <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">Cache Revalidation ISR Endpoint (Next.js URL)</label>
+                      <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">Webmaster Revalidation URL (Optional)</label>
                       <input
                         type="url"
                         placeholder="E.g., https://clientdomain.com/api/revalidate"
@@ -1084,7 +1091,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                     </div>
 
                     <div>
-                      <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">Cache Token Secret Key</label>
+                      <label className="block text-[10px] uppercase font-mono text-slate-500 mb-1.5">Security Token (Optional)</label>
                       <input
                         type="text"
                         placeholder="E.g., sec_client_reval_983"
@@ -1100,13 +1107,13 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                         onClick={() => setIsAdding(false)}
                         className="px-4 py-2 text-xs text-slate-400 hover:text-slate-200 font-mono"
                       >
-                        CANCEL
+                        Cancel
                       </button>
                       <button
                         type="submit"
                         className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs px-5 py-2 rounded-none cursor-pointer uppercase font-mono tracking-wider"
                       >
-                        SAVE_CORPORATE_TENANT
+                        Save Client Domain
                       </button>
                     </div>
                   </form>
@@ -1118,10 +1125,10 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                 <table className="w-full text-left text-xs text-slate-300">
                   <thead className="bg-slate-950 text-[10px] uppercase font-mono text-slate-500 border-b border-[#334155]">
                     <tr>
-                      <th className="px-6 py-4">Tenant Domain / docId</th>
+                      <th className="px-6 py-4">Client Domain</th>
                       <th className="px-6 py-4">Business Name</th>
-                      <th className="px-6 py-4">Territory City</th>
-                      <th className="px-6 py-4">Hotline</th>
+                      <th className="px-6 py-4">City</th>
+                      <th className="px-6 py-4">Phone Hotline</th>
                       <th className="px-6 py-4 text-right">Actions</th>
                     </tr>
                   </thead>
@@ -1171,26 +1178,25 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                   <div className="flex items-center gap-2.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
                     <h3 className="font-mono text-xs font-bold uppercase tracking-widest text-slate-200">
-                      PAYPAL_SAAS_INTEGRATION_CONSOLE
+                      SaaS Billing Integration
                     </h3>
                   </div>
                   <span className="font-mono text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 border border-emerald-500/20 uppercase tracking-wider">
-                    SECURE_WEBHOOK_READY
+                    Secure Gateway Connected
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                  Our HVAC multi-tenant engine is fully integrated with PayPal for automated onboarding. 
-                  Rather than manual registration, local HVAC business owners subscribe via PayPal Smart Buttons. 
-                  The secure webhook handler <code className="text-emerald-400 font-mono">/api/webhooks/paypal</code> immediately 
-                  listens for PayPal subscription approval payloads and automatically provisions the live Firestore tenant record 
-                  to start weather-adaptive marketing cycles instantly.
+                  Our service platform is fully integrated with PayPal for automated client registration. 
+                  Rather than manual setup, business owners subscribe directly via PayPal buttons on your sales page. 
+                  Our secure webhook handler at <code className="text-emerald-400 font-mono">/api/webhooks/paypal</code> immediately 
+                  receives the subscription details and automatically provisions their dynamic website and theme.
                 </p>
 
                 <div className="bg-slate-950 p-4 border border-slate-800 font-mono text-[10px] leading-relaxed text-slate-500">
-                  <div className="text-slate-400 mb-1 font-bold">AUTOMATED PROVISIONING FLOW:</div>
+                  <div className="text-slate-400 mb-1 font-bold">Automated Provisioning Flow:</div>
                   <div>[Customer Checkout] &mdash;(PayPal Smart Button)&mdash;&gt; [PayPal API Gateway]</div>
                   <div className="pl-44">&lsquo;&mdash;&mdash;&mdash;(Secure Webhook POST) &mdash;&mdash;&mdash;&gt; [/api/webhooks/paypal]</div>
-                  <div className="pl-96">&lsquo;&mdash;&mdash;&mdash;&gt; [Firestore Doc Created]</div>
+                  <div className="pl-96">&lsquo;&mdash;&mdash;&mdash;&gt; [Client Website Dashboard Provisioned]</div>
                 </div>
               </div>
 
@@ -1200,53 +1206,42 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                 <div className="md:col-span-7 bg-[#020617] border border-[#334155] p-6 flex flex-col gap-5">
                   <div>
                     <h4 className="font-mono text-xs font-bold text-slate-200 uppercase mb-1">
-                      1. SaaS Franchise Onboarding Metadata
+                      1. Client Checkout Details
                     </h4>
                     <p className="text-[11px] text-slate-500">
-                      Customize the checkout meta-parameters. This mock-cart is processed dynamically through PayPal's <code className="text-slate-300 font-mono">custom_id</code> state proxy.
+                      Enter the client's business details to test our checkout. The system will use PayPal's secure payload pass-through to register the domain dynamically upon payment.
                     </p>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[10px] uppercase font-mono text-slate-500">Business Domain</label>
-                      <input
-                        type="text"
-                        value={checkoutDomain}
-                        onChange={(e) => setCheckoutDomain(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ""))}
-                        placeholder="e.g. gulfstreamac.com"
-                        className="bg-slate-950 border border-slate-800 p-2.5 text-xs text-slate-200 font-mono focus:border-emerald-500 focus:outline-none"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[10px] uppercase font-mono text-slate-500">Business Name</label>
+                    <div className="flex flex-col gap-1.5 col-span-2 md:col-span-1">
+                      <label className="text-[10px] uppercase font-mono text-slate-400">Business Name</label>
                       <input
                         type="text"
                         value={checkoutName}
                         onChange={(e) => setCheckoutName(e.target.value)}
-                        placeholder="e.g. Gulf Stream AC"
+                        placeholder="e.g. Gulf Stream AC & Heating"
                         className="bg-slate-950 border border-slate-800 p-2.5 text-xs text-slate-200 font-mono focus:border-emerald-500 focus:outline-none"
                       />
                     </div>
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[10px] uppercase font-mono text-slate-500">Territory City</label>
+                    <div className="flex flex-col gap-1.5 col-span-2 md:col-span-1">
+                      <label className="text-[10px] uppercase font-mono text-slate-400">Checkout ZIP Code</label>
                       <input
                         type="text"
-                        value={checkoutCity}
-                        onChange={(e) => setCheckoutCity(e.target.value)}
-                        placeholder="e.g. Dallas"
+                        value={checkoutZipCode}
+                        onChange={(e) => setCheckoutZipCode(e.target.value)}
+                        placeholder="e.g. 75201"
                         className="bg-slate-950 border border-slate-800 p-2.5 text-xs text-slate-200 font-mono focus:border-emerald-500 focus:outline-none"
                       />
                     </div>
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[10px] uppercase font-mono text-slate-500">Hotline Phone</label>
-                      <input
-                        type="text"
-                        value={checkoutPhone}
-                        onChange={(e) => setCheckoutPhone(e.target.value)}
-                        placeholder="e.g. (214) 555-0199"
-                        className="bg-slate-950 border border-slate-800 p-2.5 text-xs text-slate-200 font-mono focus:border-emerald-500 focus:outline-none"
-                      />
+                    <div className="col-span-2 bg-slate-950 p-3 border border-slate-900 rounded">
+                      <div className="flex items-center gap-1.5 text-[10px] uppercase font-mono text-emerald-400 font-bold mb-1">
+                        <span className="inline-block w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                        AI-Powered Client Setup Active
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-relaxed">
+                        To simplify onboarding, only Name and ZIP are required. The system automatically launches Gemini to resolve vertical (e.g. Roofing, Plumbing), map territory cities, design visual themes, and define dynamic meteorological triggers.
+                      </p>
                     </div>
                   </div>
 
@@ -1255,14 +1250,14 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                   {/* PayPal Buttons */}
                   <div className="flex flex-col gap-4">
                     <div className="flex justify-between items-center text-xs">
-                      <span className="font-mono text-[10px] text-slate-500">PRODUCT ID: HVAC-AUTO-SUBSCRIBE</span>
+                      <span className="font-mono text-[10px] text-slate-500">Product ID: LIVING-OS-SUBSCRIBE</span>
                       <span className="font-bold text-slate-300 font-mono">$199 / month</span>
                     </div>
 
                     {/* PayPal Gold Button */}
                     <button
                       onClick={() => handlePayPalSubscriptionSimulate()}
-                      disabled={isSubmittingCheckout || !checkoutDomain || !checkoutName}
+                      disabled={isSubmittingCheckout || !checkoutName || !checkoutZipCode}
                       className={`relative w-full py-3.5 px-4 bg-[#ffc439] hover:bg-[#f4b31a] text-slate-950 font-sans font-bold text-sm tracking-wide transition-all shadow-md flex items-center justify-center gap-2 ${
                         isSubmittingCheckout ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
                       }`}
@@ -1274,7 +1269,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                     {/* PayPal Credit Card Button */}
                     <button
                       onClick={() => handlePayPalSubscriptionSimulate()}
-                      disabled={isSubmittingCheckout || !checkoutDomain || !checkoutName}
+                      disabled={isSubmittingCheckout || !checkoutName || !checkoutZipCode}
                       className={`relative w-full py-3.5 px-4 bg-slate-900 hover:bg-slate-850 text-white font-sans font-semibold text-xs tracking-wide transition-all shadow-md flex items-center justify-center gap-2 border border-slate-800 ${
                         isSubmittingCheckout ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
                       }`}
@@ -1289,11 +1284,11 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                   <div className="bg-[#020617] border border-[#334155] p-5 flex-1 flex flex-col gap-4 min-h-[350px]">
                     <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                       <span className="font-mono text-[10px] font-bold text-slate-400 uppercase">
-                        REAL-TIME WEBHOOK METRICS
+                        Billing Integration Stream
                       </span>
                       <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-slate-500 animate-pulse"></span>
-                        <span className="font-mono text-[9px] text-slate-500">LISTENING</span>
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span className="font-mono text-[9px] text-emerald-400">Ready</span>
                       </div>
                     </div>
 
@@ -1301,7 +1296,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                     <div className="flex-1 overflow-y-auto font-mono text-[11px] leading-relaxed flex flex-col gap-2 max-h-[250px] scrollbar-thin">
                       {checkoutLog.length === 0 ? (
                         <div className="text-slate-600 italic">
-                          No active transaction logs. Configure the metadata form and click "PayPal Subscribe" to run a high-fidelity billing subscription loop simulation.
+                          No active checkout logs. Fill out the business details on the left and click "PayPal Subscribe" to simulate a live secure subscription purchase flow.
                         </div>
                       ) : (
                         checkoutLog.map((log, i) => (
@@ -1328,7 +1323,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                       <div className="text-slate-400">⚡</div>
                       <div>
                         <span className="text-[10px] font-mono text-slate-500 uppercase block leading-none">
-                          WEBHOOK ENDPOINT
+                          Webhook Listener
                         </span>
                         <span className="font-mono text-[11px] text-emerald-400">
                           POST /api/webhooks/paypal
@@ -1351,7 +1346,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <Globe className="w-4 h-4 text-emerald-400" />
-                <span className="label-mono">LIVING_PAGE_MONITOR</span>
+                <span className="label-mono font-semibold text-slate-400">Live Website Monitor</span>
               </div>
               <h2 className="text-sm font-semibold uppercase tracking-tight text-slate-200">Active Weather Adaptive Preview</h2>
             </div>
@@ -1362,7 +1357,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                 {/* Micro Meta-info */}
                 <div className="bg-slate-950 border border-slate-800 rounded-none p-3 text-xs font-mono">
                   <div className="flex justify-between mb-1.5">
-                    <span className="text-slate-500">Domain docId:</span>
+                    <span className="text-slate-500">Domain ID:</span>
                     <span className="text-emerald-400 font-semibold">{selectedClient.domain}</span>
                   </div>
                   <div className="flex justify-between mb-1.5">
@@ -1370,7 +1365,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                     <span className="text-slate-300">{selectedClient.city}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Cache Reval status:</span>
+                    <span className="text-slate-500">Cache Status:</span>
                     <span className="text-emerald-400 font-semibold">Active ISR</span>
                   </div>
                   {selectedClient.lastUpdated && (
@@ -1413,7 +1408,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
               </div>
             ) : (
               <div className="border border-slate-800 border-dashed rounded-none p-10 text-center text-slate-500 text-xs font-mono">
-                No corporate tenants selected. Choose one from the Registry tab to monitor their active copy.
+                No client selected. Choose one from the list to preview their live weather-adaptive website.
               </div>
             )}
 
