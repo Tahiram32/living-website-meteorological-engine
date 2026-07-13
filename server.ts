@@ -16,6 +16,7 @@ import { initializeApp, getApps, getApp, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { executeMeteorologicalSync, executeSingleClientSyncTask } from "./meteorological-sync-engine";
 import { Resend } from "resend";
+import textToSpeech from "@google-cloud/text-to-speech";
 import { ValueReceiptEmail } from "./src/emails/ValueReceiptEmail";
 import React from 'react';
 
@@ -56,43 +57,7 @@ if (isProduction && !isSandboxEnv) {
   const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
   if (serviceAccountKey && serviceAccountKey.trim() !== "") {
     try {
-      let cleanedKey = serviceAccountKey.trim();
-      const firstBrace = cleanedKey.indexOf('{');
-      if (firstBrace !== -1) {
-        let depth = 0;
-        let lastBrace = -1;
-        let insideString = false;
-        let escapeNext = false;
-        for (let i = firstBrace; i < cleanedKey.length; i++) {
-          const char = cleanedKey[i];
-          if (escapeNext) {
-            escapeNext = false;
-            continue;
-          }
-          if (char === '\\') {
-            escapeNext = true;
-            continue;
-          }
-          if (char === '"') {
-            insideString = !insideString;
-            continue;
-          }
-          if (!insideString) {
-            if (char === '{') depth++;
-            else if (char === '}') {
-              depth--;
-              if (depth === 0) {
-                lastBrace = i;
-                break;
-              }
-            }
-          }
-        }
-        if (lastBrace !== -1) {
-          cleanedKey = cleanedKey.substring(firstBrace, lastBrace + 1);
-        }
-      }
-      const serviceAccount = JSON.parse(cleanedKey);
+      const serviceAccount = JSON.parse(serviceAccountKey.trim());
       
       // Strict schema validation to prevent synchronous boot crashing on malformed or missing fields in dev
       if (!serviceAccount || typeof serviceAccount !== "object") {
@@ -789,6 +754,10 @@ function renderClientSite(client: any, articles: any[], req: any, res: any) {
 
   <script>
     function startVoiceAgent() {
+      if (!window.voiceAgentAudio) {
+         window.voiceAgentAudio = new Audio();
+         window.voiceAgentAudio.play().catch(() => {}); // Unlock audio on tap
+      }
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRecognition) {
         alert("Your browser does not support the Web Speech API. Please try Google Chrome.");
@@ -828,7 +797,15 @@ function renderClientSite(client: any, articles: any[], req: any, res: any) {
           });
           const data = await res.json();
           
-          if (data.tts_text) {
+          if (data.audio_base64) {
+             if (window.voiceAgentAudio) {
+               window.voiceAgentAudio.src = "data:audio/mp3;base64," + data.audio_base64;
+               window.voiceAgentAudio.play();
+             } else {
+               const audio = new Audio("data:audio/mp3;base64," + data.audio_base64);
+               audio.play();
+             }
+          } else if (data.tts_text) {
              const utterance = new SpeechSynthesisUtterance(data.tts_text);
              window.speechSynthesis.speak(utterance);
           }
@@ -1351,9 +1328,25 @@ app.post("/api/webhooks/voice", requireRole(["gateway", "unified"]), async (req,
 
     console.log(`🗣️ [VOICE AGENT ${domain}] Received: "${transcript}" | Responded in ${Date.now() - startTime}ms: "${aiSpeechText}"`);
     
+    let audioBase64 = null;
+    try {
+      const ttsClient = new textToSpeech.TextToSpeechClient();
+      const request: any = {
+        input: { text: aiSpeechText },
+        voice: { languageCode: 'en-US', name: 'en-US-Journey-F' },
+        audioConfig: { audioEncoding: 'MP3' },
+      };
+      const [response] = await ttsClient.synthesizeSpeech(request) as any;
+      if (response && response.audioContent) {
+        audioBase64 = Buffer.from(response.audioContent).toString('base64');
+      }
+    } catch (ttsErr: any) {
+      console.warn("TTS Generation Failed:", ttsErr.message);
+    }
+    
     return res.status(200).json({
       success: true,
-      audio_url: null,
+      audio_base64: audioBase64,
       tts_text: aiSpeechText
     });
   } catch (err) {
