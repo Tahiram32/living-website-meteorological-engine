@@ -23,7 +23,7 @@ import {
   Check,
   Cpu,
   ArrowRight,
-  Sparkles,
+  Sparkles, Users, Terminal,
   Info
 } from "lucide-react";
 import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
@@ -31,8 +31,12 @@ import { HVACClient, PipelineRun, PipelineLog } from "./types";
 import { db } from "./firebase";
 import { collection, onSnapshot, query } from "firebase/firestore";
 
-export default function App() {
-  const [activeTab, setActiveTab] = useState<"console" | "tenants" | "billing">("console");
+export default function AdminDashboard() {
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [passcode, setPasscode] = useState("");
+  const ADMIN_API_KEY = "nexus2026";
+
+const [activeTab, setActiveTab] = useState<"console" | "tenants" | "billing" | "leadgen">("console");
   const [clients, setClients] = useState<HVACClient[]>([]);
   const [runs, setRuns] = useState<PipelineRun[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
@@ -74,7 +78,7 @@ export default function App() {
       setIsPolling(true);
       const res = await fetch("/api/pipeline", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Authorization": `Bearer ${ADMIN_API_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify({ city: cityToRun, delayMs: 1500 }),
       });
       const data = await res.json();
@@ -98,7 +102,7 @@ export default function App() {
       setIsPolling(true);
       const res = await fetch("/api/pipeline/sync-weather", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Authorization": `Bearer ${ADMIN_API_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify({ async: true, queueMode: mode }),
       });
       const data = await res.json();
@@ -113,7 +117,7 @@ export default function App() {
   const deleteClient = async (domain: string) => {
     if (!confirm(`Are you sure you want to de-register ${domain}?`)) return;
     try {
-      const res = await fetch(`/api/clients/${domain}`, { method: "DELETE" });
+      const res = await fetch(`/api/clients/${domain}`, { method: "DELETE", headers: { "Authorization": `Bearer ${ADMIN_API_KEY}` } });
       if (res.ok) {
         if (selectedClient?.domain === domain) {
           setSelectedClient(null);
@@ -163,7 +167,7 @@ export default function App() {
 
       const res = await fetch("/api/clients", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Authorization": `Bearer ${ADMIN_API_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
@@ -208,8 +212,7 @@ export default function App() {
 
       const res = await fetch("/api/webhooks/mock-paypal", {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
+        headers: { "Authorization": `Bearer ${ADMIN_API_KEY}`, "Content-Type": "application/json",
           "paypal-transmission-id": mockTxId,
           "paypal-transmission-time": mockTime,
           "paypal-transmission-sig": mockSig,
@@ -267,7 +270,8 @@ export default function App() {
     }, (error) => {
       console.error("Error in clients real-time subscription:", error);
     });
-    return () => unsubscribe();
+    
+  return () => unsubscribe();
   }, []);
 
   // Subscribe to pipeline runs collection in Firestore in real-time
@@ -303,7 +307,7 @@ export default function App() {
 
   // Initial load: Fetch API and API Key status info
   useEffect(() => {
-    fetch("/api/status")
+    fetch("/api/status", { headers: { "Authorization": `Bearer ${ADMIN_API_KEY}` } })
       .then((res) => res.json())
       .then((data) => setHasRealApiKey(data.hasRealApiKey))
       .catch((err) => console.error("Error fetching API status:", err));
@@ -342,8 +346,7 @@ const db = new Firestore();
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
   httpOptions: {
-    headers: {
-      "User-Agent": "aistudio-build",
+    headers: { "User-Agent": "aistudio-build",
     },
   },
 });
@@ -464,8 +467,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
 
           const isrRes = await fetch(client.isrUrl, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
+            headers: { "Content-Type": "application/json",
               "Authorization": \`Bearer \${client.isrSecret}\`
             },
             body: JSON.stringify({
@@ -520,6 +522,42 @@ exports.weatherWebmasterPipeline = async (req, res) => {
   }
 }`;
 
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+        <div className="bg-white border border-slate-200 shadow-xl rounded-xl p-8 max-w-sm w-full">
+          <div className="flex items-center gap-2 mb-6 justify-center">
+            <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center">
+              <Cpu className="w-4 h-4 text-white" />
+            </div>
+            <span className="font-bold tracking-tight text-xl text-slate-900">NexusAI Portal</span>
+          </div>
+          <p className="text-sm text-slate-500 text-center mb-6">Zero-trust environment. Please authenticate.</p>
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            if (passcode === ADMIN_API_KEY) {
+              setIsAuthenticated(true);
+            } else {
+              alert("Unauthorized access attempt logged.");
+            }
+          }} className="flex flex-col gap-4">
+            <input
+              type="password"
+              placeholder="Enter Access Token"
+              value={passcode}
+              onChange={(e) => setPasscode(e.target.value)}
+              className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+            />
+            <button type="submit" className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-semibold text-sm transition-colors">
+              Authenticate
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans">
       {/* 1. Global Header */}
@@ -535,6 +573,9 @@ exports.weatherWebmasterPipeline = async (req, res) => {
 
         {/* Status Indicators */}
         <div className="flex gap-8 items-center">
+          <a href="/" className="text-sm font-medium text-slate-500 hover:text-blue-600 transition-colors flex items-center gap-1">
+            &larr; Back to Storefront
+          </a>
           <div className="hidden md:flex flex-col">
             <span className="text-xs font-semibold tracking-wider text-slate-500">MODE</span>
             <span className="text-xs font-semibold text-slate-800">Production</span>
@@ -601,6 +642,17 @@ exports.weatherWebmasterPipeline = async (req, res) => {
             >
               <Sparkles className="w-4 h-4" />
               PayPal Portal
+            </button>
+            <button
+              onClick={() => setActiveTab("leadgen")}
+              className={`flex-1 py-2.5 px-4 text-xs font-semibold tracking-wider flex items-center justify-center gap-2 transition-all border ${
+                activeTab === "leadgen"
+                  ? "bg-blue-600/10 text-blue-600 border-blue-600/30"
+                  : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-white/50"
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              Lead Generator
             </button>
           </div>
 
@@ -1333,9 +1385,8 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                           setCheckoutStep(3); // Generating dynamic layout...
                     
                           const res = await fetch("/api/webhooks/mock-paypal", {
-                            method: "POST",
-                            headers: { 
-                              "Content-Type": "application/json",
+        method: "POST",
+                            headers: { "Authorization": `Bearer ${ADMIN_API_KEY}`, "Content-Type": "application/json",
                               "paypal-transmission-id": mockTxId,
                               "paypal-transmission-time": mockTime,
                               "paypal-transmission-sig": mockSig,

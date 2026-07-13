@@ -197,7 +197,25 @@ const ai = new GoogleGenAI({
 });
 
 const app = express();
+
+const ADMIN_API_KEY = process.env.ADMIN_API_KEY || "nexus2026";
+
+function requireAdminAuth(req: any, res: any, next: any) {
+  // Allow site resolution for edge routing without auth
+  if (req.path === '/api/clients/resolve' || req.path.startsWith('/site/') || req.path.startsWith('/api/webhooks/')) {
+    return next();
+  }
+  
+  const authHeader = req.headers.authorization;
+  if (!authHeader || authHeader !== `Bearer ${ADMIN_API_KEY}`) {
+    return res.status(401).json({ error: "Unauthorized access. Strict zero-trust policy enforced." });
+  }
+  next();
+}
+
 app.use(express.json());
+app.use("/api", requireAdminAuth);
+
 
 // Role-based routing helper for decoupled microservice splits
 // To prevent the "Doppelgänger Deployment Trap" and eliminate the "NODE_ENV Backdoor", we mandate a strict,
