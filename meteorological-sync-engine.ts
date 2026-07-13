@@ -876,8 +876,32 @@ export async function executeSingleClientSyncTask(domain: string, weather: any, 
         const emergencyFocus = client.emergencyCopyFocus || "Emergency weather dispatch diagnostic tune-ups";
         const primaryTriggersStr = Array.isArray(client.primary_triggers) ? client.primary_triggers.join(", ") : "temp >= 95, temp <= 32";
 
+        let businessTypeInstructions = "";
+        if (client.business_type === "RETAIL_HOSPITALITY") {
+          businessTypeInstructions = `
+          - You are running a retail/fast-food business.
+          - If the weather is bad (like rain), autonomously change the headline to offer comfort (e.g. "Escape the rain! Get 10% off a warm coffee today").
+          - NEVER set emergencyRoutingMode to true for retail/hospitality.
+          `;
+        } else if (client.business_type === "APPOINTMENT_BASED") {
+          businessTypeInstructions = `
+          - You are running an appointment-based business. Focus on safe, comfortable booking.
+          - NEVER set emergencyRoutingMode to true unless it's a severe natural disaster.
+          `;
+        } else {
+          businessTypeInstructions = `
+          - You are running a field service business.
+          - If the weather is bad (rain, storm, heatwave), you MUST switch to Emergency Routing Mode.
+          - Set emergencyRoutingMode to true and adjust 'promotions' to feature high-margin emergency packages (e.g., 'Emergency Diagnostic Dispatch', 'Priority Water Extraction').
+          `;
+        }
+
         const prompt = `
           As "The Living Website" autonomous AI Webmaster, analyze the current meteorological environment and mutate the landing page copy for "${client.businessName}", operating in the "${vertical}" vertical.
+          
+          BUSINESS CLASSIFICATION RULES:
+          ${businessTypeInstructions}
+
           
           Current Metrics:
           - Temperature: ${weather.temp}°F
@@ -901,7 +925,7 @@ export async function executeSingleClientSyncTask(domain: string, weather: any, 
           1. If Extreme Weather is true OR if any of the Monitored Conditions are met, make the heroTitle and alertBanner intense, immediate, and direct. Target the copy specifically to the "${vertical}" vertical, addressing "${emergencyFocus}" to convert concerned visitors into immediate bookings.
           2. Keep promotions highly realistic, practical, and customized for a local "${vertical}" business.
           3. Write a premium, high-converting educational seoArticle of exactly 120-150 words that integrates both weather conditions and "${vertical}"-specific SEO keywords organically.
-          4. NEVER raise prices during an emergency (price gouging is illegal). Instead, if Extreme Alert Active is YES, set emergencyRoutingMode to true and adjust the 'promotions' array to ONLY feature high-margin emergency packages (e.g., 'Emergency Diagnostic Dispatch', 'Priority Water Extraction') and remove low-margin routine services. If normal weather, emergencyRoutingMode is false.
+          4. NEVER raise prices during an emergency (price gouging is illegal). Follow the BUSINESS CLASSIFICATION RULES for setting emergencyRoutingMode.
         `;
 
         const result = await generateContentWithRetry(ai, {

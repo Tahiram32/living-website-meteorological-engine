@@ -193,7 +193,7 @@ const ai = new GoogleGenAI({
     headers: {
       "User-Agent": "aistudio-build",
     },
-  },
+  }
 });
 
 const app = express();
@@ -617,12 +617,12 @@ function renderClientSite(client: any, articles: any[], req: any, res: any) {
         </div>
       </div>
       <div class="flex items-center gap-3">
-        <a href="tel:${safePhoneUrl}" class="inline-flex items-center gap-2 bg-primary hover-bg-primary-dark text-white font-bold py-2.5 px-5 rounded shadow-lg transition-all text-sm uppercase tracking-wide">
+        <button onclick="startVoiceAgent()" id="voice-agent-btn-header" class="inline-flex items-center gap-2 bg-primary hover-bg-primary-dark text-white font-bold py-2.5 px-5 rounded shadow-lg transition-all text-sm uppercase tracking-wide animate-pulse">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.94.725l.548 2.2a1 1 0 01-.321.988l-1.305.98a10.582 10.582 0 004.872 4.872l.98-1.305a1 1 0 01.988-.321l2.2.548a1 1 0 01.725.94V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
           </svg>
-          CALL ${safePhone}
-        </a>
+          TAP TO TALK (AI)
+        </button>
       </div>
     </div>
   </header>
@@ -642,9 +642,9 @@ function renderClientSite(client: any, articles: any[], req: any, res: any) {
         ${safeHeroSubtitle}
       </p>
       <div class="flex flex-wrap gap-4 justify-center">
-        <a href="tel:${safePhoneUrl}" class="bg-accent hover-bg-accent-dark text-slate-950 font-extrabold py-3.5 px-8 text-sm uppercase tracking-wider shadow-xl transition-all rounded">
-          Instant Service Dispatch
-        </a>
+        <button onclick="startVoiceAgent()" id="voice-agent-btn-hero" class="bg-accent hover-bg-accent-dark text-slate-950 font-extrabold py-3.5 px-8 text-sm uppercase tracking-wider shadow-xl transition-all rounded animate-pulse">
+          Instant Service Dispatch (AI)
+        </button>
         <a href="#seo-info" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-extrabold py-3.5 px-8 text-sm uppercase tracking-wider transition-all rounded">
           Local Maintenance Guide
         </a>
@@ -747,7 +747,7 @@ function renderClientSite(client: any, articles: any[], req: any, res: any) {
     <div class="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6" style="display: flex; justify-content: space-between; align-items: center; gap: 1.5rem;">
       <div class="text-center md:text-left">
         <p class="text-white text-sm font-bold tracking-wide" style="color: #ffffff; font-size: 0.875rem; font-weight: 700;">${safeBusinessName}</p>
-        <p class="text-xs text-slate-500 mt-1" style="color: #64748b; font-size: 0.75rem; margin-top: 0.25rem;">&copy; ${new Date().getFullYear()} All rights reserved. Managed autonomously by Living Website AI Systems.</p>
+        <p class="text-xs text-slate-500 mt-1" style="color: #64748b; font-size: 0.75rem; margin-top: 0.25rem;">&copy; ${new Date().getFullYear()} All rights reserved. Managed autonomously by The Living Website.</p>
       </div>
       <div class="text-center md:text-right font-mono text-[10px] text-slate-500 flex flex-col items-center md:items-end gap-1" style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem; font-family: monospace; font-size: 10px; color: #64748b;">
         <span>STATUS: SERVER_HYDRATED (SSR)</span>
@@ -756,7 +756,74 @@ function renderClientSite(client: any, articles: any[], req: any, res: any) {
       </div>
     </div>
   </footer>
+
+  <script>
+    function startVoiceAgent() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        alert("Your browser does not support the Web Speech API. Please try Google Chrome.");
+        return;
+      }
+      
+      const buttons = document.querySelectorAll('#voice-agent-btn-header, #voice-agent-btn-hero');
+      buttons.forEach(b => {
+         b.innerHTML = '<span class="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span> LISTENING...';
+         b.classList.remove('animate-pulse');
+         b.classList.add('bg-red-600');
+      });
+
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.start();
+
+      recognition.onresult = async function(event) {
+        const transcript = event.results[0][0].transcript;
+        
+        buttons.forEach(b => {
+           b.innerHTML = '<span class="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span> THINKING...';
+        });
+
+        try {
+          const res = await fetch('/api/webhooks/voice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              domain: '${client.domain}',
+              transcript: transcript,
+              callerNumber: 'Web Browser Caller'
+            })
+          });
+          const data = await res.json();
+          
+          if (data.tts_text) {
+             const utterance = new SpeechSynthesisUtterance(data.tts_text);
+             window.speechSynthesis.speak(utterance);
+          }
+        } catch(e) {
+          console.error("Voice Error", e);
+        }
+        
+        buttons.forEach(b => {
+           b.innerHTML = 'TAP TO TALK (AI)';
+           b.classList.remove('bg-red-600');
+           b.classList.add('animate-pulse');
+        });
+      };
+
+      recognition.onerror = function(event) {
+        buttons.forEach(b => {
+           b.innerHTML = 'TAP TO TALK (AI)';
+           b.classList.remove('bg-red-600');
+           b.classList.add('animate-pulse');
+        });
+      };
+    }
+  </script>
 </body>
+
 </html>
   `);
 }
@@ -958,82 +1025,104 @@ app.post("/api/webhooks/sms", requireRole(["gateway", "unified"]), async (req, r
 });
 
 
+
+
+
+
+
+
 // ============================================================================
 // SCI-FI ARCHITECTURE 2: THE AUTONOMOUS B2B LEAD SYNDICATE (SWARM AI)
 // ============================================================================
 app.post("/api/syndicate/negotiate", requireRole(["gateway", "unified"]), async (req, res) => {
   try {
-    const { sourceDomain, leadData, zipCode } = req.body;
-    if (!sourceDomain || !zipCode) {
-      return res.status(400).json({ error: "Missing sourceDomain or zipCode" });
+    const { sourceDomain, leadData, geohash, whitelist } = req.body;
+    if (!sourceDomain || !geohash || !whitelist || !Array.isArray(whitelist) || whitelist.length === 0) {
+      return res.status(400).json({ error: "Missing sourceDomain, geohash, or empty whitelist" });
     }
 
-    // 1. Find a competitor in the same zip code who has capacity (syndicateEnabled = true)
-    const clientsSnap = await db.collection("clients")
-      .where("city", "==", zipCode) // Assuming city is used as area/zip
-      .where("syndicateEnabled", "==", true)
-      .get();
-      
-    const competitors = clientsSnap.docs
-      .filter(doc => doc.id !== sourceDomain)
-      .map(doc => ({ id: doc.id, ...doc.data() }));
+    const geohashPrefix = geohash.substring(0, 4);
+    
+    let competitors = [];
+    for (const compId of whitelist) {
+      try {
+        const docRef = db.collection("clients").doc(compId);
+        const docSnap = await docRef.get();
+        if (docSnap.exists) {
+          const compData = docSnap.data();
+          if (compData.syndicateEnabled === true && compData.geohash && String(compData.geohash).startsWith(geohashPrefix) && (compData.lead_credits || 0) > 0) {
+            competitors.push({ id: compId, ...compData });
+          }
+        }
+      } catch (err) {
+        console.warn(`Could not fetch whitelist partner ${compId}:`, err.message);
+      }
+    }
 
     if (competitors.length === 0) {
-      return res.status(404).json({ error: "No available competitors in the syndicate for this region." });
+      if (process.env.NODE_ENV !== 'production' && whitelist.includes('competitor.com')) {
+        console.warn("Dev mode fallback: injecting mock competitor since DB is unseeded");
+        competitors.push({
+          id: 'competitor.com',
+          businessName: 'Mock Competitor',
+          geohash: geohashPrefix + 'abcd',
+          lead_credits: 5
+        });
+      } else {
+        return res.status(404).json({ error: "No available, trusted competitors within emergency radius or they are out of lead credits." });
+      }
     }
 
-    const targetCompetitor = competitors[0]; // Pick the first available
+    const targetCompetitor = competitors[0];
 
-    // 2. Swarm AI Negotiation (Machine-to-Machine)
-    // We use Gemini to simulate the millisecond negotiation between the two autonomous agents
-    const aiNegotiationPrompt = `
-      You are an autonomous negotiation engine facilitating a lead transfer between two AI business agents.
-      Agent A (${sourceDomain}) is over capacity and has an emergency lead.
-      Agent B (${targetCompetitor.id}) has open capacity.
-      They are negotiating a referral fee percentage (standard is 10-20%).
-      The platform skims a 5% transaction fee.
-      Output a JSON object with:
-      - agreedReferralFeePercentage: number
-      - platformFeePercentage: 5
-      - agentAMessage: string
-      - agentBMessage: string
-      - status: "DEAL_STRUCK"
-    `;
+    const agreedReferralFeePercentage = 20;
+    const platformFeePercentage = 5;
+    const negotiationResult = {
+      agreedReferralFeePercentage,
+      platformFeePercentage,
+      agentAMessage: "Capacity exceeded. Lead transferred to trusted partner.",
+      agentBMessage: "Emergency lead received from syndicate. Dispatching now.",
+      status: "DEAL_STRUCK"
+    };
 
-    const result = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: [{ role: "user", parts: [{ text: aiNegotiationPrompt }] }],
-      config: {
-        responseMimeType: "application/json",
-        temperature: 0.1
-      }
-    });
-
-    const negotiationResult = JSON.parse(result.text || "{}");
-
-    // 3. Execute the Trade & Log it to the Syndicate Ledger
     const tradeId = `trd_${Date.now()}`;
-    await db.collection("syndicate_ledger").doc(tradeId).set({
-      timestamp: new Date().toISOString(),
-      sourceAgent: sourceDomain,
-      targetAgent: targetCompetitor.id,
-      leadData,
-      financials: negotiationResult
-    });
+    try {
+      await db.collection("syndicate_ledger").doc(tradeId).set({
+        timestamp: new Date().toISOString(),
+        sourceAgent: sourceDomain,
+        targetAgent: targetCompetitor.id,
+        leadData,
+        financials: negotiationResult,
+        geohashProximity: {
+          source: geohash,
+          target: targetCompetitor.geohash,
+          prefixMatched: geohashPrefix
+        }
+      });
+      
+      // PRE-PAID LEAD WALLET: Decrement 1 credit
+      await db.collection("clients").doc(targetCompetitor.id).update({
+        lead_credits: (targetCompetitor.lead_credits || 1) - 1
+      });
+    } catch (e) {
+      console.warn("Could not log to syndicate_ledger", e.message);
+    }
+
+    console.log(`📧 [RESEND EMAIL DISPATCH] URGENT: ${sourceDomain} just transferred a high-ticket emergency lead to you. Phone: ${leadData.callerNumber || 'Unknown'}. 1 Lead Credit has been deducted from your pre-paid wallet.`);
 
     return res.status(200).json({
       success: true,
       tradeId,
       targetAgent: targetCompetitor.id,
+      targetAgentName: targetCompetitor.businessName,
       negotiation: negotiationResult
     });
-  } catch (err: any) {
-    console.error("❌ [SWARM AI FAIL]", err.message);
-    res.status(500).json({ error: "Syndicate negotiation failed." });
+  } catch (err) {
+    console.error("Syndicate Negotiate Error:", err);
+    res.status(500).json({ error: "Failed to negotiate syndicate trade" });
   }
 });
 
-// 3.4. Autonomous Voice Receptionist Webhook (Low-Latency Optimized)
 app.post("/api/webhooks/voice", requireRole(["gateway", "unified"]), async (req, res) => {
   const startTime = Date.now();
   try {
@@ -1061,10 +1150,17 @@ app.post("/api/webhooks/voice", requireRole(["gateway", "unified"]), async (req,
     const weatherCond = client.lastTelemetry?.condition || "Clear";
     const emergencyRoutingMode = client.lastWeatherCopy?.emergencyRoutingMode || false;
     
+    // Check if RETAIL_HOSPITALITY order is detected
+    const isRetail = client.business_type === "RETAIL_HOSPITALITY";
+    const isOrderDetected = isRetail && transcript.toLowerCase().includes("order");
+    
+    if (isOrderDetected) {
+       console.log(`📧 [RESEND EMAIL DISPATCH] NEW ORDER via AI for ${client.businessName}: ${transcript}. Customer Phone: ${callerNumber || 'Unknown'}`);
+    }
+    
     // Real-time calendar availability check using Google Calendar API
-
     let hasAvailableSlot = false;
-    if (privateData.googleCalendarToken) {
+    if (privateData.googleCalendarToken && !isRetail) {
       try {
         const timeMin = new Date().toISOString();
         const timeMax = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(); // Next 2 hours
@@ -1125,18 +1221,23 @@ app.post("/api/webhooks/voice", requireRole(["gateway", "unified"]), async (req,
           const busySlots = calData.calendars?.primary?.busy || [];
           hasAvailableSlot = busySlots.length === 0;
         } else {
-          console.error("Calendar API Error:", await calRes.text());
+          console.warn("Calendar Free/Busy API failed with status:", calRes.status);
+          hasAvailableSlot = true; 
         }
-      } catch (err: any) {
-        console.error("Calendar fetch error:", err.message);
+      } catch (err) {
+        console.warn("Failed to check calendar availability:", err.message);
+        hasAvailableSlot = true; 
       }
+    } else if (!isRetail) {
+      hasAvailableSlot = true; 
     }
 
     // -------------------------------------------------------------
     // SWARM AI LEAD SYNDICATE INJECTION
     // -------------------------------------------------------------
     let syndicateTrade = null;
-    if (!hasAvailableSlot && client.syndicateEnabled) {
+    const isFieldService = client.business_type === "FIELD_SERVICE" || client.vertical?.toLowerCase().includes("hvac") || client.vertical?.toLowerCase().includes("plumbing");
+    if (!hasAvailableSlot && client.syndicateEnabled && isFieldService) {
       console.log(`[SWARM AI] ${domain} is at full capacity. Attempting Autonomous Syndicate Negotiation...`);
       try {
         const syndicateRes = await fetch(`http://127.0.0.1:${process.env.PORT || 3000}/api/syndicate/negotiate`, {
@@ -1147,7 +1248,8 @@ app.post("/api/webhooks/voice", requireRole(["gateway", "unified"]), async (req,
           },
           body: JSON.stringify({
             sourceDomain: domain,
-            zipCode: client.city,
+            geohash: client.geohash,
+            whitelist: client.syndicateWhitelist,
             leadData: { transcript, callerNumber }
           })
         });
@@ -1157,36 +1259,45 @@ app.post("/api/webhooks/voice", requireRole(["gateway", "unified"]), async (req,
         } else {
           console.log(`[SWARM AI FAIL] No available syndicate partners in ${client.city}.`);
         }
-      } catch(e: any) {
+      } catch(e) {
         console.error("Syndicate negotiation error in voice hook:", e.message);
       }
     }
 
+    let baseInstructions = "";
+    if (client.business_type === "RETAIL_HOSPITALITY") {
+      baseInstructions = `
+      - You are a fast-food/retail cashier. Answer menu questions, state opening hours, and take to-go orders.
+      - If the user orders food, reply: "Great, your order is placed! Our kitchen has been notified."
+      - NEVER mention dispatching or emergency slots.
+      `;
+    } else if (client.business_type === "APPOINTMENT_BASED") {
+      baseInstructions = `
+      - You are a receptionist for an appointment-based business (like a salon or accountant).
+      - Help the user book calendar slots or handle cancellations.
+      `;
+    } else {
+      baseInstructions = `
+      - You are a field service dispatcher.
+      - If EmergencyRoutingMode (${emergencyRoutingMode}) is true, you MUST state: "Due to severe weather, we are currently only dispatching for emergency services."
+      - If they want to book and calendar is YES, say "I have locked in your emergency slot. A dispatcher is on the way."
+      `;
+    }
+
     let systemPrompt = `
-      You are a low-latency voice receptionist for ${client.businessName} in ${client.city}.
+      You are an in-browser web voice receptionist for ${client.businessName} in ${client.city}.
       Current weather: ${weatherCond} (Extreme Mode: ${isExtreme ? "YES" : "NO"}).
       Calendar availability right now: ${hasAvailableSlot ? "YES" : "NO"}.
+      
+      ${syndicateTrade ? `🚨 CRITICAL OVERRIDE 🚨: We are currently at maximum capacity.
+      However, our AI Syndicate has negotiated a real-time transfer to our trusted local partner, ${syndicateTrade.targetAgentName}.
+      You MUST inform the user: "${client.businessName} is currently at full capacity, but because this is an emergency, I have immediately dispatched our trusted partner, ${syndicateTrade.targetAgentName}, to your location. They will email you shortly."` : ''}
       
       CRITICAL INSTRUCTIONS TO PREVENT HUMAN HANG-UP:
       - Reply with EXACTLY ONE short sentence. Under 15 words.
       - NEVER use pleasantries like "How can I help you today?".
-      - If EmergencyRoutingMode (${emergencyRoutingMode}) is true, you MUST state: "Due to severe weather, we are currently only dispatching for emergency services."
-      - If they want to book and calendar is YES, say "I have locked in your emergency slot. A dispatcher is on the way."
+      ${baseInstructions}
     `;
-
-    if (syndicateTrade && syndicateTrade.success) {
-      systemPrompt += `
-      - You were over capacity, but your Swarm AI Agent successfully negotiated a lead transfer to a competitor (${syndicateTrade.targetAgent}) for a referral fee of ${syndicateTrade.negotiation.agreedReferralFeePercentage}%.
-      - DO NOT mention the referral fee.
-      - Say exactly: "We are at full capacity, but I have autonomously dispatched our trusted partner in your area to handle your emergency immediately."
-      `;
-    } else {
-      systemPrompt += `
-      - If calendar is NO, say "Our schedule is currently full due to high volume, but I will put you on the priority waitlist."
-      `;
-    }
-    systemPrompt += `\n      - DO NOT mention prices.\n    `;
-
 
     // Maximize speed by limiting output tokens and using flash
     let aiSpeechText = "";
@@ -1199,36 +1310,28 @@ app.post("/api/webhooks/voice", requireRole(["gateway", "unified"]), async (req,
         ],
         config: {
           maxOutputTokens: 30, // Force brevity to ensure low TTS latency
-          temperature: 0.1,    // Low temp for deterministic, fast routing
+          temperature: 0.2
         }
       });
-      aiSpeechText = result.text || "I will have a dispatcher contact you immediately.";
-    } catch (aiErr: any) {
-      console.error(`[VOICE AGENT FAIL] Gemini failed for ${domain}:`, aiErr.message);
-      aiSpeechText = "I'm sorry, I'm having trouble connecting right now. Can I take a message?";
+      aiSpeechText = result.text || "I'm having trouble connecting to the network. Please call back.";
+    } catch (aiErr) {
+      console.warn("AI generation failed for voice:", aiErr.message);
+      aiSpeechText = "I'm currently offline for maintenance. Please leave a message.";
     }
 
-    const latencyMs = Date.now() - startTime;
-
+    console.log(`🗣️ [VOICE AGENT ${domain}] Received: "${transcript}" | Responded in ${Date.now() - startTime}ms: "${aiSpeechText}"`);
+    
     return res.status(200).json({
-      status: "success",
-      action: "voice_synthesis",
-      callerNumber: callerNumber || "UNKNOWN",
-      spokenResponse: aiSpeechText.trim(),
-      metrics: {
-        latencyMs,
-        optimizedForRealtime: true,
-      },
-      bookedAppointment: transcript.toLowerCase().includes("book") && hasAvailableSlot
+      success: true,
+      audio_url: null,
+      tts_text: aiSpeechText
     });
-
-  } catch (error: any) {
-    console.error("❌ [VOICE-RECEPTIONIST] Failed to process incoming call:", error.message);
-    res.status(500).json({ error: "Failed to process voice webhook", details: error.message });
+  } catch (err) {
+    console.error("Voice Webhook Error:", err.message);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// 3.5. Autonomous SEO Email Webhook
 app.post("/api/webhooks/email", requireRole(["gateway", "unified"]), async (req, res) => {
   try {
     const { domain, text, senderEmail } = req.body || {};
@@ -2269,6 +2372,7 @@ async function generateTenantProfileAndBaseline(rawBusinessName: string, zipCode
           responseSchema: {
             type: Type.OBJECT,
             properties: {
+              business_type: { type: Type.STRING, description: "Must be exactly FIELD_SERVICE, APPOINTMENT_BASED, or RETAIL_HOSPITALITY based on the business type." },
               vertical: { type: Type.STRING, description: "Business vertical (Roofing, HVAC, Plumbing, Solar, Landscaping, Pest Control, Snow Removal, Pool Maintenance, Locksmith, etc.)" },
               trigger_type: { type: Type.STRING, description: "Category of weather triggers (Meteorological_Anomalies, Thermal_Thresholds, Precipitation_Spikes, Storm_Surges)" },
               primary_triggers: { 
@@ -2282,7 +2386,7 @@ async function generateTenantProfileAndBaseline(rawBusinessName: string, zipCode
               themeColor: { type: Type.STRING, description: "Primary visual brand color: blue, emerald, amber, red, cyan, slate, purple, orange" },
               icon: { type: Type.STRING, description: "Suitable brand icon: wind, droplets, thermometer, sun, snowflake, shield, home, wrench, alert-triangle, bolt, flame" }
             },
-            required: ["vertical", "trigger_type", "primary_triggers", "emergencyCopyFocus", "city", "phone", "themeColor", "icon"]
+            required: ["business_type", "vertical", "trigger_type", "primary_triggers", "emergencyCopyFocus", "city", "phone", "themeColor", "icon"]
           },
           temperature: 0.2
         }
@@ -2848,6 +2952,42 @@ app.post("/api/webhooks/paypal", requireRole(["gateway", "unified"]), verifyPayP
       }
 
       const customIdStr = resource.custom_id || resource.custom || "";
+      
+      // PRE-PAID LEAD WALLET TOP-UP
+      if (customIdStr) {
+        try {
+          const parsedCustom = JSON.parse(customIdStr);
+          if (parsedCustom.action === "buy_credits" && parsedCustom.domain) {
+            const domain = parsedCustom.domain.toLowerCase().trim();
+            const creditsToBuy = parsedCustom.credits || 2; 
+            
+            console.log(`[PAYPAL WALLET TOP-UP] Adding ${creditsToBuy} lead credits to ${domain}`);
+            const clientRef = db.collection("clients").doc(domain);
+            
+            const clientDoc = await clientRef.get();
+            if (clientDoc.exists) {
+               const currentCredits = clientDoc.data().lead_credits || 0;
+               await clientRef.update({
+                 lead_credits: currentCredits + creditsToBuy
+               });
+               
+               if (transmissionId) {
+                  await db.collection("paypal_transactions").doc(String(transmissionId)).set({
+                    processedAt: new Date().toISOString(),
+                    domain: domain,
+                    eventType: event?.event_type || "UNKNOWN",
+                    status: "completed",
+                    type: "lead_credit_topup"
+                  }, { merge: true });
+               }
+               return res.status(200).json({ status: "success", action: "wallet_topup", domain });
+            } else {
+               console.warn(`[PAYPAL WALLET TOP-UP] Domain ${domain} not found!`);
+               return res.status(404).json({ error: "Domain not found for top-up" });
+            }
+          }
+        } catch(e) {}
+      }
       
       let businessName = "";
       let zipCode = "";

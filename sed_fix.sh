@@ -1,0 +1,1 @@
+sed -i 's/  },const app = express();const ADMIN_API_KEY = process.env.ADMIN_API_KEY || "nexus2026";/  }\n});\nconst app = express();\nconst ADMIN_API_KEY = process.env.ADMIN_API_KEY || "nexus2026";/g' server.ts

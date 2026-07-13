@@ -568,7 +568,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
             <Cpu className="w-4 h-4 text-white" />
           </div>
           <span className="font-bold tracking-tight text-xl text-slate-900">
-            Living Website <span className="text-blue-600 font-sans">Engine</span>
+            The Living Website
           </span>
         </div>
 

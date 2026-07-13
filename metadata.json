@@ -1,5 +1,5 @@
 {
-  "name": "Living Website Console",
+  "name": "The Living Website Console",
   "description": "Multi-tenant autonomous AI webmaster dashboard that manages HVAC clients, fetches live weather metrics, and triggers rate-limited, schema-validated Gemini updates and ISR cache revalidation.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

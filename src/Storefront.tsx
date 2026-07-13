@@ -40,7 +40,7 @@ export default function Storefront() {
               <Zap className="w-4 h-4 text-white" />
             </div>
             <span className="font-bold tracking-tight text-xl text-slate-900">
-              Living Website <span className="text-blue-600 font-sans">Engine</span>
+              The Living Website
             </span>
           </div>
           
@@ -227,8 +227,12 @@ export default function Storefront() {
                         
                         {!checkoutStep && (
                           <>
-                            <p className="font-bold text-slate-900 mb-6 text-lg max-w-xs leading-snug drop-shadow-sm">
-                              Your AI Marketing Manager is ready. Pay <span className="text-blue-600">$50</span> to unblur, unlock, and publish live.
+                            <p className="font-bold text-slate-900 mb-2 text-lg max-w-xs leading-snug drop-shadow-sm">
+                              Your AI Marketing Manager is ready.
+                            </p>
+                            <p className="text-slate-700 text-sm mb-6 max-w-sm px-4">
+                              Pay a one-time <span className="font-bold text-blue-600">$10</span> setup fee today. We will provision your AI voice agent, secure your local phone number, and deploy your site. 
+                              You get 14 days to let the AI run your business. If you love it, it's $50/month after that. Cancel before day 14 and never pay another dime.
                             </p>
                             <div className="w-full pointer-events-auto">
                               <PayPalScriptProvider options={{ clientId: import.meta.env.VITE_PAYPAL_CLIENT_ID || "test", components: "buttons", currency: "USD" }}>
@@ -240,8 +244,8 @@ export default function Storefront() {
                                       intent: "CAPTURE",
                                       purchase_units: [
                                         {
-                                          amount: { value: "50.00", currency_code: "USD" },
-                                          description: `Living Website - Auto Onboarding`,
+                                          amount: { value: "10.00", currency_code: "USD" },
+                                          description: `The Living Website - $10 Setup Fee (14-Day Trial)`,
                                           custom_id: JSON.stringify({
                                             websiteUrl: websiteUrl,
                                             tier: "smb-adaptive"
@@ -364,7 +368,7 @@ export default function Storefront() {
                         <Zap className="w-5 h-5 text-blue-600" />
                       </div>
                       <div>
-                        <div className="text-sm font-semibold text-slate-900">Living Website Engine</div>
+                        <div className="text-sm font-semibold text-slate-900">The Living Website</div>
                         <div className="text-xs text-slate-500">Weekly Value Receipt</div>
                       </div>
                     </div>
