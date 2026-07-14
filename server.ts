@@ -4,6 +4,8 @@
  */
 
 import express from "express";
+import rateLimit from "express-rate-limit";
+import cron from "node-cron";
 import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
@@ -1130,7 +1132,13 @@ app.post("/api/syndicate/negotiate", requireRole(["gateway", "unified"]), async 
   }
 });
 
-app.post("/api/webhooks/voice", requireRole(["gateway", "unified"]), async (req, res) => {
+const voiceRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit each IP to 10 requests per window
+  message: { error: "Too many voice interactions from this IP, please try again later." }
+});
+
+app.post("/api/webhooks/voice", voiceRateLimiter, requireRole(["gateway", "unified"]), async (req, res) => {
   const startTime = Date.now();
   try {
     const { domain, transcript, callerNumber } = req.body || {};
@@ -1298,7 +1306,8 @@ app.post("/api/webhooks/voice", requireRole(["gateway", "unified"]), async (req,
       
       ${syndicateTrade ? `🚨 CRITICAL OVERRIDE 🚨: We are currently at maximum capacity.
       However, our AI Syndicate has negotiated a real-time transfer to our trusted local partner, ${syndicateTrade.targetAgentName}.
-      You MUST inform the user: "${client.businessName} is currently at full capacity, but because this is an emergency, I have immediately dispatched our trusted partner, ${syndicateTrade.targetAgentName}, to your location. They will email you shortly."` : ''}
+      You MUST inform the user: "${client.businessName} is currently at full capacity, but because this is an emergency, I have immediately dispatched our trusted partner, ${syndicateTrade.targetAgentName}, to your location. They will email you shortly."` : (!hasAvailableSlot && client.syndicateEnabled && isFieldService ? `🚨 CRITICAL OVERRIDE 🚨: We are currently fully booked and our partner network in your area is at capacity.
+      You MUST inform the user: "We are currently fully booked and our partner network in your area is at capacity. However, I have placed you at the top of our priority waitlist. Our manager will text you the second a slot opens."` : '')}
       
       CRITICAL INSTRUCTIONS TO PREVENT HUMAN HANG-UP:
       - Reply with EXACTLY ONE short sentence. Under 15 words.
@@ -1344,6 +1353,17 @@ app.post("/api/webhooks/voice", requireRole(["gateway", "unified"]), async (req,
       console.warn("TTS Generation Failed:", ttsErr.message);
     }
     
+    try {
+      await db.collection("clients").doc(domain.toLowerCase().trim()).collection("voice_logs").add({
+        transcript,
+        response: aiSpeechText,
+        timestamp: new Date().toISOString(),
+        callerNumber: callerNumber || "Unknown"
+      });
+    } catch (logErr: any) {
+      console.warn("Failed to log voice call:", logErr.message);
+    }
+
     return res.status(200).json({
       success: true,
       audio_base64: audioBase64,
@@ -3282,6 +3302,68 @@ async function startServer() {
     
     // Simulate Cloud Scheduler in our monolithic test environment
     if (serviceRole === "unified") {
+      // Weekly Value Receipt Cron Job - Runs every Friday at 4:00 PM (16:00)
+      cron.schedule('0 16 * * 5', async () => {
+        console.log("📅 [CRON] Running Weekly Value Receipt job...");
+        try {
+          const clientsSnapshot = await db.collection("clients").get();
+          const now = new Date();
+          const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          
+          for (const doc of clientsSnapshot.docs) {
+            const client = doc.data();
+            if (!client.email) continue;
+            
+            const domain = doc.id;
+            
+            const callsQuery = await db.collection("clients").doc(domain).collection("voice_logs")
+              .where("timestamp", ">=", oneWeekAgo.toISOString()).get();
+            const numCalls = callsQuery.size;
+            
+            const appointmentsQuery = await db.collection("clients").doc(domain).collection("appointments")
+              .where("createdAt", ">=", oneWeekAgo.toISOString()).get();
+            let revenue = 0;
+            appointmentsQuery.forEach(a => { revenue += a.data().value || 150; });
+            
+            const syndicateQuery = await db.collection("syndicate_ledger")
+              .where("sourceDomain", "==", domain)
+              .where("timestamp", ">=", oneWeekAgo.toISOString()).get();
+            const numTraded = syndicateQuery.size;
+            let referralFees = 0;
+            syndicateQuery.forEach(s => { 
+              referralFees += s.data().feeEarned || 50; 
+            });
+            
+            const resend = new Resend(process.env.RESEND_API_KEY || "dummy");
+            if (!process.env.RESEND_API_KEY) {
+               console.log(`⚠️ [CRON] No RESEND_API_KEY, skipping Weekly Value Receipt email for ${client.email}`);
+               continue;
+            }
+            
+            const htmlContent = `
+              <h2>Your Weekly Value Receipt</h2>
+              <p>Here is what your AI Receptionist accomplished for ${client.businessName} this week:</p>
+              <ul>
+                <li>🤖 Your AI Receptionist answered ${numCalls} calls this week.</li>
+                <li>💰 It secured $${revenue} in booked appointments.</li>
+                <li>🤝 It traded ${numTraded} excess lead(s) to the Syndicate, earning you a $${referralFees} referral fee.</li>
+              </ul>
+              <p>Thank you for using Main Street OS!</p>
+            `;
+            
+            await resend.emails.send({
+              from: 'Main Street OS <onboarding@resend.dev>',
+              to: client.email,
+              subject: `Weekly Value Receipt for ${client.businessName}`,
+              html: htmlContent
+            });
+            console.log(`✅ [CRON] Sent Weekly Value Receipt to ${client.email}`);
+          }
+        } catch (err: any) {
+          console.error("❌ [CRON] Error sending Weekly Value Receipts:", err.message);
+        }
+      });
+
       setInterval(async () => {
         try {
           await fetch(`http://127.0.0.1:${PORT}/api/cron/publish-articles`, { method: "POST" });
