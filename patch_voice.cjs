@@ -1,59 +1,35 @@
 const fs = require('fs');
-let code = fs.readFileSync('server.ts', 'utf8');
+let code = fs.readFileSync('server.ts', 'utf-8');
 
-const importTarget = `import { Resend } from "resend";`;
-const importReplacement = `import { Resend } from "resend";\nimport textToSpeech from "@google-cloud/text-to-speech";`;
+const target1 = `      let syndicateTrade = null;`;
+const replacement1 = `      let syndicateTrade = null;
+      let zeroPartnersFound = false;`;
 
-code = code.replace(importTarget, importReplacement);
+code = code.replace(target1, replacement1);
 
-const voiceTarget = `    console.log(\`🗣️ [VOICE AGENT \${domain}] Received: "\${transcript}" | Responded in \${Date.now() - startTime}ms: "\${aiSpeechText}"\`);
-    
-    return res.status(200).json({
-      success: true,
-      audio_url: null,
-      tts_text: aiSpeechText
-    });`;
-
-const voiceReplacement = `    console.log(\`🗣️ [VOICE AGENT \${domain}] Received: "\${transcript}" | Responded in \${Date.now() - startTime}ms: "\${aiSpeechText}"\`);
-    
-    let audioBase64 = null;
-    try {
-      const ttsClient = new textToSpeech.TextToSpeechClient();
-      const request = {
-        input: { text: aiSpeechText },
-        voice: { languageCode: 'en-US', name: 'en-US-Journey-F' },
-        audioConfig: { audioEncoding: 'MP3' },
-      };
-      const [response] = await ttsClient.synthesizeSpeech(request);
-      if (response.audioContent) {
-        audioBase64 = response.audioContent.toString('base64');
-      }
-    } catch (ttsErr) {
-      console.warn("TTS Generation Failed:", ttsErr.message);
-    }
-    
-    return res.status(200).json({
-      success: true,
-      audio_base64: audioBase64,
-      tts_text: aiSpeechText
-    });`;
-
-code = code.replace(voiceTarget, voiceReplacement);
-
-const htmlTarget = `          if (data.tts_text) {
-             const utterance = new SpeechSynthesisUtterance(data.tts_text);
-             window.speechSynthesis.speak(utterance);
+const target2 = `          } else {
+            console.log(
+              \`[SWARM AI FAIL] No available syndicate partners in \${client.city}.\`,
+            );
           }`;
-          
-const htmlReplacement = `          if (data.audio_base64) {
-             const audio = new Audio("data:audio/mp3;base64," + data.audio_base64);
-             audio.play();
-          } else if (data.tts_text) {
-             const utterance = new SpeechSynthesisUtterance(data.tts_text);
-             window.speechSynthesis.speak(utterance);
+const replacement2 = `          } else if (syndicateRes.status === 404) {
+            zeroPartnersFound = true;
+            console.log(
+              \`[SWARM AI FAIL] 0 partners found in Geohash query for \${client.city}. Activating Fallback Waitlist.\`,
+            );
+          } else {
+            console.log(
+              \`[SWARM AI FAIL] Syndicate API returned status \${syndicateRes.status}\`,
+            );
           }`;
 
-code = code.replace(htmlTarget, htmlReplacement);
+code = code.replace(target2, replacement2);
+
+const target3 = `          : !hasAvailableSlot && client.syndicateEnabled && isFieldService
+            ? \`🚨 CRITICAL OVERRIDE 🚨: We are currently fully booked and our partner network in your area is at capacity.`;
+const replacement3 = `          : zeroPartnersFound
+            ? \`🚨 CRITICAL OVERRIDE 🚨: We are currently fully booked and our partner network in your area is at capacity.`;
+
+code = code.replace(target3, replacement3);
 
 fs.writeFileSync('server.ts', code);
-console.log("Patched server.ts with TTS");
