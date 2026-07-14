@@ -13,8 +13,8 @@ export interface WeatherCopy {
   cacheTags: string[];
 }
 
-export interface HVACClient {
-  domain: string; // Document ID (e.g. 'hendersonhvac.com')
+export interface TenantClient {
+  domain: string; // Document ID (e.g. 'hendersonbusiness.com')
   businessName: string;
   city: string;
   phone: string;
@@ -22,7 +22,7 @@ export interface HVACClient {
   isrSecret?: string;
   createdAt?: string;
   business_type?: "FIELD_SERVICE" | "APPOINTMENT_BASED" | "RETAIL_HOSPITALITY" | "OTHER";
-  vertical?: string; // e.g. "Roofing", "HVAC", "Plumbing", "Solar", "Pool Maintenance"
+  vertical?: string; // e.g. "Roofing", "Local Business", "Plumbing", "Solar", "Pool Maintenance"
   trigger_type?: string; // e.g. "Meteorological_Anomalies", "Thermal_Thresholds", "Precipitation_Spikes", "Storm_Surges"
   primary_triggers?: string[]; // e.g. ["wind_speed > 35", "hail_probability > 50"]
   emergencyCopyFocus?: string; // e.g. "Emergency tarping and hail damage repairs"

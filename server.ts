@@ -368,7 +368,7 @@ function renderClientSite(client: any, articles: any[], req: any, res: any) {
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=3600");
 
-  const vertical = client.vertical || "HVAC";
+  const vertical = client.vertical || "Local Business";
   const theme = sanitizeThemeColor(client.themeColor);
   
   let primaryColor = "#10b981"; // emerald-500
@@ -430,7 +430,7 @@ function renderClientSite(client: any, articles: any[], req: any, res: any) {
   let visualIcon = "⚡";
   const iconName = (client.icon || "").toLowerCase();
   const vert = vertical.toLowerCase();
-  if (iconName === "snowflake" || vert.includes("cool") || vert.includes("hvac")) visualIcon = "❆";
+  if (iconName === "snowflake" || vert.includes("cool") || vert.includes("business")) visualIcon = "❆";
   else if (iconName === "flame" || vert.includes("heat") || vert.includes("burn")) visualIcon = "🔥";
   else if (iconName === "wind" || vert.includes("air") || vert.includes("vent")) visualIcon = "💨";
   else if (iconName === "droplets" || vert.includes("plumb") || vert.includes("leak")) visualIcon = "💧";
@@ -895,7 +895,7 @@ app.get("/api/status", requireRole(["gateway", "unified"]), (req, res) => {
   res.json({ hasRealApiKey });
 });
 
-// 1. Get all HVAC tenants from Firestore
+// 1. Get all Local Business tenants from Firestore
 app.get("/api/clients", requireRole(["gateway", "unified"]), async (req, res) => {
   try {
     const clientsCol = collection(db, "clients");
@@ -1243,7 +1243,7 @@ app.post("/api/webhooks/voice", requireRole(["gateway", "unified"]), async (req,
     // SWARM AI LEAD SYNDICATE INJECTION
     // -------------------------------------------------------------
     let syndicateTrade = null;
-    const isFieldService = client.business_type === "FIELD_SERVICE" || client.vertical?.toLowerCase().includes("hvac") || client.vertical?.toLowerCase().includes("plumbing");
+    const isFieldService = client.business_type === "FIELD_SERVICE" || client.vertical?.toLowerCase().includes("business") || client.vertical?.toLowerCase().includes("plumbing");
     if (!hasAvailableSlot && client.syndicateEnabled && isFieldService) {
       console.log(`[SWARM AI] ${domain} is at full capacity. Attempting Autonomous Syndicate Negotiation...`);
       try {
@@ -1768,7 +1768,7 @@ app.post("/api/pipeline", requireRole(["gateway", "unified"]), async (req, res) 
           await addLog("info", `Invoking Gemini-3.5-Flash with native JSON responseSchema enforcement...`);
 
           const prompt = `
-            You are "The Living Website" Autonomous AI Webmaster. Your task is to update the homepage contents for an HVAC business named "${client.businessName}" located in ${client.city} dynamically based on the current weather.
+            You are "The Living Website" Autonomous AI Webmaster. Your task is to update the homepage contents for an Local Business business named "${client.businessName}" located in ${client.city} dynamically based on the current weather.
             
             Current Weather in ${client.city}:
             - Temperature: ${weatherData.temp}°F
@@ -1786,7 +1786,7 @@ app.post("/api/pipeline", requireRole(["gateway", "unified"]), async (req, res) 
             properties: {
               heroTitle: {
                 type: Type.STRING,
-                description: "Bold weather-adaptive main title incorporating the HVAC brand, city name, and current temperature or condition."
+                description: "Bold weather-adaptive main title incorporating the Local Business brand, city name, and current temperature or condition."
               },
               heroSubtitle: {
                 type: Type.STRING,
@@ -1861,9 +1861,9 @@ app.post("/api/pipeline", requireRole(["gateway", "unified"]), async (req, res) 
           const isCold = weatherData.temp <= 45;
           
           let hTitle = `${weatherData.condition} in ${client.city}: Keep Cool with ${client.businessName}!`;
-          let hSub = `Beat the ${weatherData.temp}°F weather with our expert, local HVAC technicians. Calls dispatched immediately at ${client.phone}.`;
+          let hSub = `Beat the ${weatherData.temp}°F weather with our expert, local Local Business technicians. Calls dispatched immediately at ${client.phone}.`;
           let alertText = "";
-          let sHeading = `Is Your HVAC System Configured for ${client.city}'s Weather?`;
+          let sHeading = `Is Your Local Business System Configured for ${client.city}'s Weather?`;
           let sArticle = `In ${client.city}, sudden atmospheric shifts place massive stresses on ventilation compressors. Running systems with dusty air filter grids causes evaporator coils to restrict and overheat. Ensure comfort and double equipment lifespans by coordinating professional diagnostics.`;
           let promoList = [`$49 Routine Inspection`, `Free System Filter Upgrade`];
           
@@ -1909,7 +1909,7 @@ app.post("/api/pipeline", requireRole(["gateway", "unified"]), async (req, res) 
 
         try {
           // Identify mock sandbox domains to simulate successful ISR revalidation without network fetch failures
-          const isMockDomain = ["hendersonhvac.com", "desertbreeze-cooling.com", "windycityheating.com", "cascadeclimate.com"].some(
+          const isMockDomain = ["hendersonbusiness.com", "desertbreeze-cooling.com", "windycityheating.com", "cascadeclimate.com"].some(
             (mockDom) => client.domain.toLowerCase().includes(mockDom)
           );
 
@@ -2071,7 +2071,7 @@ app.get("/site/:domain", requireRole(["gateway", "unified"]), async (req, res) =
     // Pass articles to renderClientSite
     return renderClientSite(clientData, articles, req, res);
   } catch (error) {
-    console.error("Error rendering standalone HVAC client page:", error);
+    console.error("Error rendering standalone Local Business client page:", error);
     res.status(500).send("Fatal error compiling standalone webpage template.");
   }
 });
@@ -2396,7 +2396,7 @@ async function generateTenantProfileAndBaseline(rawBusinessName: string, zipCode
             type: Type.OBJECT,
             properties: {
               business_type: { type: Type.STRING, description: "Must be exactly FIELD_SERVICE, APPOINTMENT_BASED, or RETAIL_HOSPITALITY based on the business type." },
-              vertical: { type: Type.STRING, description: "Business vertical (Roofing, HVAC, Plumbing, Solar, Landscaping, Pest Control, Snow Removal, Pool Maintenance, Locksmith, etc.)" },
+              vertical: { type: Type.STRING, description: "Business vertical (Roofing, Local Business, Plumbing, Solar, Landscaping, Pest Control, Snow Removal, Pool Maintenance, Locksmith, etc.)" },
               trigger_type: { type: Type.STRING, description: "Category of weather triggers (Meteorological_Anomalies, Thermal_Thresholds, Precipitation_Spikes, Storm_Surges)" },
               primary_triggers: { 
                 type: Type.ARRAY, 
@@ -2439,8 +2439,8 @@ async function generateTenantProfileAndBaseline(rawBusinessName: string, zipCode
     let themeColor = "slate";
     let icon = "wrench";
     
-    if (nameLower.includes("ac") || nameLower.includes("air") || nameLower.includes("heat") || nameLower.includes("hvac") || nameLower.includes("cool") || nameLower.includes("climate")) {
-      vertical = "HVAC";
+    if (nameLower.includes("ac") || nameLower.includes("air") || nameLower.includes("heat") || nameLower.includes("business") || nameLower.includes("cool") || nameLower.includes("climate")) {
+      vertical = "Local Business";
       trigger_type = "Thermal_Thresholds";
       primary_triggers = ["temp >= 95", "temp <= 32", "humidity >= 70"];
       emergencyCopyFocus = "Emergency air conditioning failure restoration and furnace diagnostic dispatch";
@@ -3231,7 +3231,7 @@ if (process.env.NODE_ENV !== "production") {
 
 // Serve frontend build files in production or hook up Vite middleware in development
 async function startServer() {
-  console.log("🚀 [BOOT] Starting weather-adaptive autonomous HVAC backend server...");
+  console.log("🚀 [BOOT] Starting weather-adaptive autonomous Local Business backend server...");
 
   const isProd = process.env.NODE_ENV === "production";
 

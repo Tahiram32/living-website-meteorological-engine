@@ -58,9 +58,9 @@ const db = getFirestore(adminApp, firebaseConfig.firestoreDatabaseId || "(defaul
 
 const defaultClients = [
   {
-    domain: "hendersonhvac.com",
-    businessName: "Henderson HVAC & Air Quality",
-    vertical: "HVAC",
+    domain: "hendersonbusiness.com",
+    businessName: "Henderson Local Business & Air Quality",
+    vertical: "Local Business",
     trigger_type: "Thermal_Thresholds",
     primary_triggers: ["temp >= 95", "temp <= 32"],
     emergencyCopyFocus: "Emergency cooling and heating dispatch",
@@ -68,7 +68,7 @@ const defaultClients = [
     icon: "snowflake",
     city: "Dallas",
     phone: "(214) 555-0192",
-    isrUrl: "https://hendersonhvac.com/api/revalidate",
+    isrUrl: "https://hendersonbusiness.com/api/revalidate",
     isrSecret: "sec_dallas_9837a",
     lastUpdated: new Date().toISOString(),
     lastWeatherCopy: {
@@ -76,7 +76,7 @@ const defaultClients = [
       heroSubtitle: "Keep your family safe. High-efficiency cooling tune-ups starting at $49. Emergency dispatch units ready.",
       alertBanner: "CRITICAL HEAT ADVISORY: Double dispatch active across Dallas County today.",
       seoHeading: "How to Avoid AC Evaporator Coil Freeze-Ups in Texas Summers",
-      seoArticle: "With temperatures climbing above 100°F, residential AC units run continuously. To prevent freeze-ups and motor burnout, replace your air filters monthly, keep vents open, and schedule a professional coil clean. Henderson HVAC stands ready with immediate emergency scheduling to keep you cool.",
+      seoArticle: "With temperatures climbing above 100°F, residential AC units run continuously. To prevent freeze-ups and motor burnout, replace your air filters monthly, keep vents open, and schedule a professional coil clean. Henderson Local Business stands ready with immediate emergency scheduling to keep you cool.",
       promotions: ["$49 Heatwave AC Tune-up", "Free Air Filter with any Repair", "15% Off Condenser Fan Motor Replacement"],
       cacheTags: ["weather", "homepage", "dallas-deals"]
     }
@@ -84,7 +84,7 @@ const defaultClients = [
   {
     domain: "desertbreeze-cooling.com",
     businessName: "Desert Breeze Climate Repair",
-    vertical: "HVAC",
+    vertical: "Local Business",
     trigger_type: "Thermal_Thresholds",
     primary_triggers: ["temp >= 100"],
     emergencyCopyFocus: "Extreme heat AC repair and compressor restoration",
@@ -108,7 +108,7 @@ const defaultClients = [
   {
     domain: "windycityheating.com",
     businessName: "Windy City Heating & Furnace",
-    vertical: "HVAC",
+    vertical: "Local Business",
     trigger_type: "Thermal_Thresholds",
     primary_triggers: ["temp <= 32"],
     emergencyCopyFocus: "Furnace lockout prevention and frozen pipe protection",
@@ -132,7 +132,7 @@ const defaultClients = [
   {
     domain: "cascadeclimate.com",
     businessName: "Cascade Climate Systems",
-    vertical: "HVAC",
+    vertical: "Local Business",
     trigger_type: "Humidity_Thresholds",
     primary_triggers: ["humidity >= 75"],
     emergencyCopyFocus: "Dehumidification audit and heat pump efficiency optimization",
@@ -177,7 +177,7 @@ async function runSeed() {
   const snapshot = await clientsCol.get();
   
   if (snapshot.empty) {
-    console.log("Database 'clients' collection is empty. Seeding HVAC default tenants...");
+    console.log("Database 'clients' collection is empty. Seeding Local Business default tenants...");
     for (const client of defaultClients) {
       await clientsCol.doc(client.domain).set(client);
       console.log(`✅ Seeded client: ${client.domain}`);

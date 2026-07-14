@@ -6,7 +6,7 @@
  * 1. Ingest: Dual-API real-time weather ingestion with zero key requirements.
  *    - Primary: Open-Meteo API (Latitude/Longitude lookup).
  *    - Secondary: US National Weather Service API (api.weather.gov) for authoritative real-time US telemetry.
- * 2. Contextualize: Scans Firestore to map active multi-tenant HVAC domains matching the atmospheric impact zones.
+ * 2. Contextualize: Scans Firestore to map active multi-tenant Local Business domains matching the atmospheric impact zones.
  * 3. Generate: Directs Gemini-3.5-Flash utilizing native schema-enforced structured JSON to rewrite homepage assets.
  * 4. Mutate: Atomically commits the generated copy back to Firestore tenants.
  * 5. Revalidate: Fires secure edge revalidation signals with jittered delays to instantly flush Cloudflare edge cache safely.
@@ -175,7 +175,7 @@ const weatherCopySchema = {
   properties: {
     heroTitle: {
       type: Type.STRING,
-      description: "Atmospherically-driven display title. Must incorporate current temperature, severe weather alerts, or thermal conditions beautifully with the HVAC brand."
+      description: "Atmospherically-driven display title. Must incorporate current temperature, severe weather alerts, or thermal conditions beautifully with the Local Business brand."
     },
     heroSubtitle: {
       type: Type.STRING,
@@ -187,7 +187,7 @@ const weatherCopySchema = {
     },
     seoHeading: {
       type: Type.STRING,
-      description: "Educational H2 header detailing how current weather metrics (such as high humidity or subzero freeze) directly strain HVAC coils."
+      description: "Educational H2 header detailing how current weather metrics (such as high humidity or subzero freeze) directly strain Local Business coils."
     },
     seoArticle: {
       type: Type.STRING,
@@ -247,7 +247,7 @@ export class SecretResolver {
 
     if (!name.startsWith("projects/")) {
       // Parse as direct secret name under current GCP project context
-      const projectId = process.env.GOOGLE_CLOUD_PROJECT || "desert-breeze-hvac";
+      const projectId = process.env.GOOGLE_CLOUD_PROJECT || "desert-breeze-business";
       name = `projects/${projectId}/secrets/${name}/versions/latest`;
     }
 
@@ -615,7 +615,7 @@ export async function executeMeteorologicalSync(options?: { queueMode?: "simulat
     const snapshot = await clientsCol.get();
     
     if (snapshot.empty) {
-      await addLog("warn", "No active HVAC clients registered in database. Aborting.");
+      await addLog("warn", "No active Local Business clients registered in database. Aborting.");
       runLog.status = "completed";
       runLog.completedAt = new Date().toISOString();
       await runLogRef.set(runLog);
@@ -624,7 +624,7 @@ export async function executeMeteorologicalSync(options?: { queueMode?: "simulat
 
     const clients = snapshot.docs.map(doc => doc.data());
     runLog.totalClients = clients.length;
-    await addLog("info", `Discovered ${clients.length} active tenant HVAC website(s) in system.`);
+    await addLog("info", `Discovered ${clients.length} active tenant Local Business website(s) in system.`);
 
     // Group clients by city to avoid duplicate weather API queries
     const citiesMap = new Map<string, any[]>();
@@ -822,7 +822,7 @@ export async function createDeadLetterAlert(domain: string, error: any, runLogRe
  * Computes highly accurate, domain-tailored meteorological landing page copies on failure of external AI APIs.
  */
 export function generateLocalCopyFallback(weather: any, client: any): any {
-  const vertical = client.vertical || "HVAC";
+  const vertical = client.vertical || "Local Business";
   const emergencyFocus = client.emergencyCopyFocus || "Emergency weather services";
   const isExtreme = !!weather.isExtreme;
   
@@ -871,7 +871,7 @@ export async function executeSingleClientSyncTask(domain: string, weather: any, 
 
     if (hasRealApiKey) {
       try {
-        const vertical = client.vertical || "HVAC";
+        const vertical = client.vertical || "Local Business";
         const triggerType = client.trigger_type || "Thermal_Thresholds";
         const emergencyFocus = client.emergencyCopyFocus || "Emergency weather dispatch diagnostic tune-ups";
         const primaryTriggersStr = Array.isArray(client.primary_triggers) ? client.primary_triggers.join(", ") : "temp >= 95, temp <= 32";
@@ -993,7 +993,7 @@ export async function executeSingleClientSyncTask(domain: string, weather: any, 
     // Revalidate edge cache
     if (client.isrUrl && client.isrSecret) {
       try {
-        const isMockDomain = ["hendersonhvac.com", "desertbreeze-cooling.com", "windycityheating.com", "cascadeclimate.com"].some(
+        const isMockDomain = ["hendersonbusiness.com", "desertbreeze-cooling.com", "windycityheating.com", "cascadeclimate.com"].some(
           (mockDom) => domain.toLowerCase().includes(mockDom)
         );
 

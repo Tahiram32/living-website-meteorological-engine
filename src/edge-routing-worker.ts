@@ -84,11 +84,11 @@ export default {
         if (clientData) {
           // Found high-speed edge tenant. Hydrate the static template or weather-cached HTML
           const copy = clientData.lastWeatherCopy || {
-            heroTitle: `Professional HVAC Repair & Install | ${clientData.businessName}`,
+            heroTitle: `Professional Local Business Repair & Install | ${clientData.businessName}`,
             heroSubtitle: `Your trusted local comfort experts in ${clientData.city}. Call us today at ${clientData.phone}.`,
             alertBanner: "",
             seoHeading: `Premium Heating & Cooling Services in ${clientData.city}`,
-            seoArticle: `Welcome to ${clientData.businessName}. We provide professional HVAC repair, installation, and seasonal maintenance across ${clientData.city} and surrounding areas.`,
+            seoArticle: `Welcome to ${clientData.businessName}. We provide professional Local Business repair, installation, and seasonal maintenance across ${clientData.city} and surrounding areas.`,
             promotions: ["$20 Off First Service Call", "Free System Replacement Estimates"],
             cacheTags: ["homepage", "edge-cached"]
           };
@@ -102,7 +102,7 @@ export default {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${clientData.businessName} - HVAC Solutions in ${clientData.city}</title>
+  <title>${clientData.businessName} - Local Business Solutions in ${clientData.city}</title>
   <meta name="description" content="${copy.heroTitle}">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -152,7 +152,7 @@ export default {
         <div class="bg-slate-900 text-emerald-400 p-2 font-mono font-bold text-lg rounded">❆</div>
         <div>
           <h1 class="text-lg font-extrabold text-slate-900 tracking-tight leading-none">\${clientData.businessName}</h1>
-          <span class="text-xs text-slate-500 font-mono uppercase">\${clientData.city} • LICENSED HVAC</span>
+          <span class="text-xs text-slate-500 font-mono uppercase">\${clientData.city} • LICENSED Local Business</span>
         </div>
       </div>
       <a href="tel:\${clientData.phone.replace(/\\D/g, '')}" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-5 rounded text-sm uppercase">

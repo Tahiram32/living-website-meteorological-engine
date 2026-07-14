@@ -27,7 +27,7 @@ import {
   Info
 } from "lucide-react";
 import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
-import { HVACClient, PipelineRun, PipelineLog } from "./types";
+import { TenantClient, PipelineRun, PipelineLog } from "./types";
 import { db, auth, googleProvider } from "./firebase";
 import { collection, onSnapshot, query } from "firebase/firestore";
 import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
@@ -38,13 +38,13 @@ export default function AdminDashboard() {
   const ADMIN_API_KEY = "nexus2026";
 
 const [activeTab, setActiveTab] = useState<"console" | "tenants" | "billing" | "leadgen">("console");
-  const [clients, setClients] = useState<HVACClient[]>([]);
+  const [clients, setClients] = useState<TenantClient[]>([]);
   const [runs, setRuns] = useState<PipelineRun[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [activeRun, setActiveRun] = useState<PipelineRun | null>(null);
   const [selectedCity, setSelectedCity] = useState("Dallas");
   const [customCity, setCustomCity] = useState("");
-  const [selectedClient, setSelectedClient] = useState<HVACClient | null>(null);
+  const [selectedClient, setSelectedClient] = useState<TenantClient | null>(null);
   const [hasRealApiKey, setHasRealApiKey] = useState(false);
 
   // Client registration form state
@@ -55,7 +55,7 @@ const [activeTab, setActiveTab] = useState<"console" | "tenants" | "billing" | "
   const [newClientIsr, setNewClientIsr] = useState("");
   const [newClientSecret, setNewClientSecret] = useState("");
   const [isAdding, setIsAdding] = useState(false);
-  const [pendingClients, setPendingClients] = useState<HVACClient[]>([]);
+  const [pendingClients, setPendingClients] = useState<TenantClient[]>([]);
   const [submitError, setSubmitError] = useState("");
 
   // PayPal Checkout Form States
@@ -145,7 +145,7 @@ const [activeTab, setActiveTab] = useState<"console" | "tenants" | "billing" | "
     }
 
     try {
-      const tempClient: HVACClient = {
+      const tempClient: TenantClient = {
         domain: newClientDomain,
         businessName: newClientName,
         city: newClientCity,
@@ -258,7 +258,7 @@ const [activeTab, setActiveTab] = useState<"console" | "tenants" | "billing" | "
   useEffect(() => {
     const clientsQuery = query(collection(db, "clients"));
     const unsubscribe = onSnapshot(clientsQuery, (snapshot) => {
-      const data = snapshot.docs.map(doc => doc.data() as HVACClient);
+      const data = snapshot.docs.map(doc => doc.data() as TenantClient);
       setClients(data);
       setPendingClients(prev => prev.filter(p => !data.some(d => d.domain === p.domain)));
       if (data.length > 0) {
@@ -364,11 +364,11 @@ exports.weatherWebmasterPipeline = async (req, res) => {
   try {
     // 1. Query Firestore for clients situated in this city
     // Next.js Multi-tenant mapping uses domain names as document IDs
-    const clientsRef = db.collection("hvac-clients");
+    const clientsRef = db.collection("tenant-clients");
     const snapshot = await clientsRef.where("city", "==", city).get();
 
     if (snapshot.empty) {
-      console.log(\`No multi-tenant HVAC clients active in city: \${city}\`);
+      console.log(\`No multi-tenant Local Business clients active in city: \${city}\`);
       return res.status(200).send(\`Finished: 0 clients found in \${city}\`);
     }
 
@@ -418,7 +418,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
       try {
         // Enforce schemas natively using the API's responseSchema configuration
         const prompt = \`
-          You are 'The Living Website' Autonomous AI Webmaster. Update homepages for HVAC client "\${client.businessName}" in \${client.city}.
+          You are 'The Living Website' Autonomous AI Webmaster. Update homepages for Local Business client "\${client.businessName}" in \${client.city}.
           Weather: \${weatherMetrics.temp}°F, \${weatherMetrics.condition}, \${weatherMetrics.humidity}% Humidity.
           Contact: \${client.phone}
         \`;
@@ -450,7 +450,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
         const weatherCopy = JSON.parse(result.text.trim());
 
         // Save generated copy back into Firestore under tenant's domain doc ID
-        await db.collection("hvac-clients").doc(client.domain).update({
+        await db.collection("tenant-clients").doc(client.domain).update({
           lastWeatherCopy: weatherCopy,
           lastUpdated: new Date().toISOString()
         });
@@ -1074,10 +1074,10 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                     )}
                     
                     <div>
-                      <label className="block text-xs font-sans text-slate-500 mb-1.5">Client Domain URL (e.g. hendersonhvac.com) *</label>
+                      <label className="block text-xs font-sans text-slate-500 mb-1.5">Client Domain URL (e.g. hendersonbusiness.com) *</label>
                       <input
                         type="text"
-                        placeholder="E.g., hendersonhvac.com"
+                        placeholder="E.g., hendersonbusiness.com"
                         value={newClientDomain}
                         onChange={(e) => setNewClientDomain(e.target.value.toLowerCase())}
                         className="w-full bg-white border border-slate-300 shadow-sm rounded-md px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-sans"
@@ -1089,7 +1089,7 @@ exports.weatherWebmasterPipeline = async (req, res) => {
                       <label className="block text-xs font-sans text-slate-500 mb-1.5">Business Name *</label>
                       <input
                         type="text"
-                        placeholder="E.g., Henderson HVAC Services"
+                        placeholder="E.g., Henderson Local Business Services"
                         value={newClientName}
                         onChange={(e) => setNewClientName(e.target.value)}
                         className="w-full bg-white border border-slate-300 shadow-sm rounded-md px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-sans"
