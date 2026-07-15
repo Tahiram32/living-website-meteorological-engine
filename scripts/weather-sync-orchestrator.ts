@@ -286,27 +286,31 @@ async function runOrchestrator() {
       }
     };
 
-    const dispatchNext = async () => {
-      // 1. If the orchestrator is paused due to an active circuit breaker state, do not dequeue
+    // Drive the scheduling engine
+    while (tasksToProcess.length > 0 || activeCount > 0) {
+      // 1. Wait if we hit concurrency limit
+      if (activeCount >= concurrencyLimit || tasksToProcess.length === 0) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        continue;
+      }
+
+      // 2. Wait if circuit breaker is active
       const now = Date.now();
       if (orchestratorPausedUntil > now) {
-        return;
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        continue;
       }
 
-      // 2. Enforce concurrency limit and stop if queue is empty
-      if (activeCount >= concurrencyLimit || tasksToProcess.length === 0) {
-        return;
-      }
-
-      // 3. Respect stagger throttle delay between dispatches
+      // 3. Wait for stagger throttle
       const timeSinceLastDispatch = now - lastDispatchTime;
       if (timeSinceLastDispatch < throttleMs) {
-        return;
+        await new Promise(resolve => setTimeout(resolve, throttleMs - timeSinceLastDispatch));
+        continue;
       }
 
       // Dequeue next task
       const task = tasksToProcess.shift();
-      if (!task) return;
+      if (!task) continue;
 
       activeCount++;
       lastDispatchTime = Date.now();
@@ -367,22 +371,8 @@ async function runOrchestrator() {
           }
         } finally {
           activeCount--;
-          triggerDispatch();
         }
       })();
-
-      // Recurse/check next slot
-      triggerDispatch();
-    };
-
-    const triggerDispatch = () => {
-      setTimeout(dispatchNext, 50);
-    };
-
-    // Drive the scheduling engine
-    while (tasksToProcess.length > 0 || activeCount > 0) {
-      triggerDispatch();
-      await new Promise(resolve => setTimeout(resolve, 500));
     }
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
