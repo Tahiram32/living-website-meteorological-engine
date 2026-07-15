@@ -3,22 +3,6 @@ import { Zap, Shield, Check, Loader2, AlertTriangle, Smartphone, Mail, Calendar 
 
 import { auth, googleProvider } from "./firebase";
 import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
-import * as Sentry from '@sentry/react';
-
-// Add this button component to your app to test Sentry's error tracking
-function ErrorButton() {
-  return (
-    <button
-      onClick={() => {
-        throw new Error('This is your first error!');
-      }}
-      className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded text-sm shadow-sm"
-    >
-      Break the world
-    </button>
-  );
-}
-
 export default function Storefront() {
   const [businessName, setBusinessName] = useState("");
   const [zipCode, setZipCode] = useState("");
@@ -60,9 +44,7 @@ export default function Storefront() {
               The Living Website
             </span>
           </div>
-          <div>
-            <ErrorButton />
-          </div>
+
         </div>
       </nav>
 
