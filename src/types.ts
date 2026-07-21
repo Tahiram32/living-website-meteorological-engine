@@ -43,6 +43,10 @@ export interface TenantClient {
     isExtreme: boolean;
     isTriggerFired?: boolean;
     source?: string;
+    surgeMultiplier?: number;
+    aqi?: number;
+    uvIndex?: number;
+    microClimateAlert?: string;
   };
 }
 
@@ -52,6 +56,10 @@ export interface WeatherMetrics {
   humidity: number;
   isExtreme: boolean;
   advice: string;
+  surgeMultiplier?: number;
+  aqi?: number;
+  uvIndex?: number;
+  microClimateAlert?: string;
 }
 
 export interface PipelineLog {

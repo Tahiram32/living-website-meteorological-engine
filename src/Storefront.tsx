@@ -3,6 +3,7 @@ import { Zap, Shield, Check, Loader2, AlertTriangle, Smartphone, Mail, Calendar 
 
 import { auth, googleProvider } from "./firebase";
 import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 export default function Storefront() {
   const [businessName, setBusinessName] = useState("");
   const [zipCode, setZipCode] = useState("");

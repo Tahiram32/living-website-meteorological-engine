@@ -1,13 +1,13 @@
-# Meteorological Weather Sync Engine
+# Weatherpulse Sync Engine
 
-Meteorological Weather Sync Engine is a multi-tenant application that autonomously orchestrates and syncs real-time extreme meteorological data for a fleet of isolated clients. 
+Weatherpulse is a multi-tenant application that synchronizes weather data for a fleet of clients. 
 
-It queries weather conditions for various geographical zones and dispatches asynchronous tasks (via Firebase and custom worker endpoints) to update client dashboards based on severe weather fluctuations.
+It queries local weather conditions and dispatches background tasks to update client dashboards based on severe weather fluctuations.
 
 ## Features
-- **Multi-Tenant Architecture**: Safely isolates and syncs weather data across various independent clients.
-- **Asynchronous Dispatcher**: Efficient polling-based concurrency engine that respects rate limits without starving the event loop.
-- **Sentry Integrated**: Full observability into backend event-loops, background workers, and frontend UI errors.
+- **Multi-Tenant Architecture**: Safely isolates data across independent clients.
+- **Asynchronous Dispatcher**: Polling-based background jobs with rate limiting.
+- **Sentry Integration**: Error tracking and performance monitoring.
 
 ## Quickstart
 
