@@ -5,9 +5,11 @@ Weatherpulse is a multi-tenant application that synchronizes weather data for a 
 It queries local weather conditions and dispatches background tasks to update client dashboards based on severe weather fluctuations.
 
 ## Features
-- **Multi-Tenant Architecture**: Safely isolates data across independent clients.
-- **Asynchronous Dispatcher**: Polling-based background jobs with rate limiting.
-- **Sentry Integration**: Error tracking and performance monitoring.
+- **AI Micro-Climate Radar**: Next-gen algorithmic prediction alerts integrating AQI, UV Index, and hyper-local severe storm detection.
+- **Automated Surge Pricing**: Dynamic price multipliers (up to 1.5x) triggered autonomously during extreme weather events to maximize client revenue.
+- **Enterprise Multi-Tenant Architecture**: Safely isolates data across independent clients, resolving domain-based tenant queries instantly.
+- **Asynchronous Pipeline Orchestrator**: Polling-based background jobs with rate limiting and a secure, hardened JSON credential parser for GitHub Actions CI/CD.
+- **Sentry Integration**: Complete error tracking and node-profiling to trace execution time and CPU spikes.
 
 ## Quickstart
 
