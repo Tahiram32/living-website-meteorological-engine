@@ -31,6 +31,11 @@ import { TenantClient, PipelineRun, PipelineLog } from "./types";
 import { db, auth, googleProvider } from "./firebase";
 import { collection, onSnapshot, query, getDocs, doc } from "firebase/firestore";
 import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import AnalyticsCards from "./components/AnalyticsCards";
+import ClientTable from "./components/ClientTable";
+import Sidebar from "./components/Sidebar";
+import { useClients } from "./hooks/useClients";
+import { useRuns } from "./hooks/useRuns";
 
 export default function AdminDashboard() {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -38,8 +43,8 @@ export default function AdminDashboard() {
   const ADMIN_API_KEY = "nexus2026";
 
 const [activeTab, setActiveTab] = useState<"console" | "tenants" | "billing" | "leadgen">("console");
-  const [clients, setClients] = useState<TenantClient[]>([]);
-  const [runs, setRuns] = useState<PipelineRun[]>([]);
+  const { clients } = useClients();
+  const { runs } = useRuns();
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [activeRun, setActiveRun] = useState<PipelineRun | null>(null);
   const [selectedCity, setSelectedCity] = useState("Dallas");
@@ -290,40 +295,19 @@ const [activeTab, setActiveTab] = useState<"console" | "tenants" | "billing" | "
     };
   }, []);
 
-  // Subscribe to multi-tenant clients/registrants in Firestore in real-time
+  // React to changes in clients to update pending state and auto-selection
   useEffect(() => {
-    const clientsQuery = query(collection(db, "clients"));
-    const unsubscribe = onSnapshot(clientsQuery, (snapshot) => {
-      const data = snapshot.docs.map(doc => doc.data() as TenantClient);
-      setClients(data);
-      setPendingClients(prev => prev.filter(p => !data.some(d => d.domain === p.domain)));
-      if (data.length > 0) {
-        setSelectedClient(prev => {
-          if (!prev) return data[0];
-          const matched = data.find(c => c.domain === prev.domain);
-          return matched || data[0];
-        });
-      }
-    }, (error) => {
-      console.error("Error in clients real-time subscription:", error);
-    });
-    
-  return () => unsubscribe();
-  }, []);
+    setPendingClients(prev => prev.filter(p => !clients.some(d => d.domain === p.domain)));
+    if (clients.length > 0) {
+      setSelectedClient(prev => {
+        if (!prev) return clients[0];
+        const matched = clients.find(c => c.domain === prev.domain);
+        return matched || clients[0];
+      });
+    }
+  }, [clients]);
 
-  // Subscribe to pipeline runs collection in Firestore in real-time
-  useEffect(() => {
-    const runsQuery = query(collection(db, "runs"));
-    const unsubscribe = onSnapshot(runsQuery, (snapshot) => {
-      const data = snapshot.docs.map(doc => doc.data() as PipelineRun);
-      // Sort in-memory descending by startedAt to avoid needing compound Firestore index
-      data.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
-      setRuns(data);
-    }, (error) => {
-      console.error("Error in runs real-time subscription:", error);
-    });
-    return () => unsubscribe();
-  }, []);
+
 
   // Sync activeRun details when the runs directory or selected activeRunId changes
   useEffect(() => {
@@ -646,75 +630,10 @@ exports.weatherWebmasterPipeline = async (req, res) => {
         <div className="lg:col-span-8 flex flex-col gap-6">
           
           {/* Platform Metrics Dashboard Widget */}
-          <div className="bg-white border border-slate-300 shadow-sm rounded-lg p-4 mb-4 flex gap-4 font-sans relative">
-            {metricsHealth.status === "failed" && (
-              <div className="absolute top-2 right-2 flex items-center gap-1 text-[10px] bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full font-medium border border-rose-200 uppercase tracking-wider animate-pulse">
-                <Activity size={10} />
-                Stale Data Alert: Cron Failed
-              </div>
-            )}
-            {metricsHealth.status === "healthy" && metricsHealth.lastUpdated && (
-              <div className="absolute top-2 right-2 text-[10px] text-slate-400 font-medium">
-                Sync: {new Date(metricsHealth.lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </div>
-            )}
-            <div className="flex-1 bg-slate-50 border border-slate-200 rounded-md p-4">
-              <div className="text-xs text-slate-500 uppercase tracking-wider mb-1 font-semibold">Weekly Lead Trades</div>
-              <div className="text-2xl text-slate-800 font-bold">{platformMetrics.trades}</div>
-            </div>
-            <div className="flex-1 bg-slate-50 border border-slate-200 rounded-md p-4">
-              <div className="text-xs text-slate-500 uppercase tracking-wider mb-1 font-semibold">Weekly Pipeline Revenue</div>
-              <div className="text-2xl text-emerald-600 font-bold">${platformMetrics.revenue.toLocaleString()}</div>
-            </div>
-          </div>
+          <AnalyticsCards platformMetrics={platformMetrics} metricsHealth={metricsHealth} />
 
           {/* Module Selector Tabs */}
-          <div className="bg-white border border-slate-300 shadow-sm rounded-lg p-1 flex gap-1 font-sans">
-            <button
-              onClick={() => setActiveTab("console")}
-              className={`flex-1 py-2.5 px-4 text-xs font-semibold tracking-wider flex items-center justify-center gap-2 transition-all border ${
-                activeTab === "console"
-                  ? "bg-blue-600/10 text-blue-600 border-blue-600/30"
-                  : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-white/50"
-              }`}
-            >
-              <Terminal className="w-4 h-4" />
-              Campaign Console
-            </button>
-            <button
-              onClick={() => setActiveTab("tenants")}
-              className={`flex-1 py-2.5 px-4 text-xs font-semibold tracking-wider flex items-center justify-center gap-2 transition-all border ${
-                activeTab === "tenants"
-                  ? "bg-blue-600/10 text-blue-600 border-blue-600/30"
-                  : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-white/50"
-              }`}
-            >
-              <Database className="w-4 h-4" />
-              Client Directory ({clients.length})
-            </button>
-            <button
-              onClick={() => setActiveTab("billing")}
-              className={`flex-1 py-2.5 px-4 text-xs font-semibold tracking-wider flex items-center justify-center gap-2 transition-all border ${
-                activeTab === "billing"
-                  ? "bg-blue-600/10 text-blue-600 border-blue-600/30"
-                  : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-white/50"
-              }`}
-            >
-              <Sparkles className="w-4 h-4" />
-              PayPal Portal
-            </button>
-            <button
-              onClick={() => setActiveTab("leadgen")}
-              className={`flex-1 py-2.5 px-4 text-xs font-semibold tracking-wider flex items-center justify-center gap-2 transition-all border ${
-                activeTab === "leadgen"
-                  ? "bg-blue-600/10 text-blue-600 border-blue-600/30"
-                  : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-white/50"
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              Lead Generator
-            </button>
-          </div>
+          <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} clientCount={clients.length} />
 
           {/* TAB 1: Autonomous Webmaster Console */}
           {activeTab === "console" && (
@@ -1230,95 +1149,13 @@ exports.weatherWebmasterPipeline = async (req, res) => {
               </div>
 
               {/* Tenants Grid/List */}
-              <div className="bg-white border border-slate-300 shadow-sm overflow-hidden">
-                
-                {clients.length === 0 && pendingClients.length === 0 ? (
-                  <div className="text-center py-16 px-6">
-                    <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100">
-                      <Globe className="w-8 h-8" />
-                    </div>
-                    <h3 className="text-sm font-semibold text-slate-800 mb-2">No clients registered</h3>
-                    <p className="text-xs text-slate-500 max-w-sm mx-auto mb-6 leading-relaxed">
-                      Add your first client to provision their dashboard and enable weather-adaptive landing pages.
-                    </p>
-                    <button
-                      onClick={() => setIsAdding(true)}
-                      className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-sm px-6 py-2.5 rounded-lg text-xs font-semibold font-sans transition-colors"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Add your first client
-                    </button>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs text-slate-700">
-                  <thead className="bg-slate-50 text-xs font-sans text-slate-500 border-b border-slate-200">
-                    <tr>
-                      <th className="px-6 py-4">Client Domain</th>
-                      <th className="px-6 py-4">Business Name</th>
-                      <th className="px-6 py-4">City</th>
-                      <th className="px-6 py-4">Phone Hotline</th>
-                      <th className="px-6 py-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    {clients.map((c) => (
-                      <tr
-                        key={c.domain}
-                        onClick={() => setSelectedClient(c)}
-                        className={`hover:bg-slate-50 cursor-pointer transition-all ${
-                          selectedClient?.domain === c.domain ? "bg-slate-50 font-semibold text-slate-900" : ""
-                        }`}
-                      >
-                        <td className="px-6 py-4 font-sans text-blue-600 flex items-center gap-1.5">
-                          <Globe className="w-3.5 h-3.5 text-slate-500" />
-                          {c.domain}
-                        </td>
-                        <td className="px-6 py-4 text-slate-800">{c.businessName}</td>
-                        <td className="px-6 py-4">
-                          <span className="bg-white border border-slate-200 shadow-sm px-2 py-0.5 rounded-lg text-slate-700 font-sans text-xs">
-                            {c.city}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 font-sans text-slate-500">{c.phone}</td>
-                        <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            onClick={() => deleteClient(c.domain)}
-                            className="text-slate-500 hover:text-rose-400 p-1 rounded-lg hover:bg-rose-50 cursor-pointer"
-                            title="De-register domain"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                    {pendingClients.map((c) => (
-                      <tr
-                        key={c.domain}
-                        className="opacity-50 pointer-events-none"
-                      >
-                        <td className="px-6 py-4 font-sans text-blue-600 flex items-center gap-1.5">
-                          <RefreshCw className="w-3.5 h-3.5 text-blue-600 animate-spin" />
-                          {c.domain}
-                        </td>
-                        <td className="px-6 py-4 text-slate-800">{c.businessName}</td>
-                        <td className="px-6 py-4">
-                          <span className="bg-white border border-slate-200 shadow-sm px-2 py-0.5 rounded-lg text-slate-700 font-sans text-xs">
-                            {c.city}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 font-sans text-slate-500">{c.phone}</td>
-                        <td className="px-6 py-4 text-right">
-                          <span className="text-xs text-slate-400 italic">Syncing...</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                  </div>
-                )}
-
-              </div>
+              <ClientTable
+                pendingClients={pendingClients}
+                selectedClient={selectedClient}
+                setSelectedClient={setSelectedClient}
+                deleteClient={deleteClient}
+                setIsAdding={setIsAdding}
+              />
             </div>
           )}
 
