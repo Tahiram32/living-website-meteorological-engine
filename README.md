@@ -7,6 +7,10 @@
 
 **An open-source weather intelligence and automation platform for businesses that depend on environmental conditions.**
 
+**[🔴 View the Live Demo](https://demo.weatherpulse.dev)**
+
+![Weatherpulse Dashboard](assets/dashboard.jpg)
+
 Weatherpulse is a high-performance **Node.js weather API** and **multi-tenant weather platform** designed to synchronize hyper-local weather data for a fleet of clients. 
 
 Operating as a robust **weather dashboard backend** and **weather alert engine**, it aggregates local weather conditions and dispatches background tasks to update client dashboards based on severe weather fluctuations. Powered by **Firebase weather synchronization**, it provides true **enterprise weather monitoring** at scale.
