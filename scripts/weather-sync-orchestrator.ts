@@ -46,11 +46,29 @@ const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
 if (serviceAccountKey && serviceAccountKey.trim() !== "") {
   try {
     let cleanedKey = serviceAccountKey.trim();
-    const firstBrace = cleanedKey.indexOf('{');
-    const lastBrace = cleanedKey.lastIndexOf('}');
-    
-    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) {
-      cleanedKey = cleanedKey.substring(firstBrace, lastBrace + 1);
+    const start = cleanedKey.indexOf('{');
+    if (start !== -1) {
+      let depth = 0;
+      let inString = false;
+      let escape = false;
+      for (let i = start; i < cleanedKey.length; i++) {
+        const char = cleanedKey[i];
+        if (inString) {
+          if (escape) escape = false;
+          else if (char === '\\') escape = true;
+          else if (char === '"') inString = false;
+        } else {
+          if (char === '"') inString = true;
+          else if (char === '{') depth++;
+          else if (char === '}') {
+            depth--;
+            if (depth === 0) {
+              cleanedKey = cleanedKey.substring(start, i + 1);
+              break;
+            }
+          }
+        }
+      }
     }
     
     const serviceAccount = JSON.parse(cleanedKey);
