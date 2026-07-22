@@ -5,7 +5,6 @@
 [![CI Status](https://github.com/Tahiram32/weatherpulse/actions/workflows/weather-sync.yml/badge.svg)](https://github.com/Tahiram32/weatherpulse/actions)
 [![Sentry](https://img.shields.io/badge/Sentry-Monitoring-362D59?logo=sentry&logoColor=white)](https://sentry.io/)
 
-**⭐ 250+ GitHub Stars | 🍴 30 Forks | 👥 Used by 15 organizations | 📦 12,000 npm downloads**
 
 **An open-source weather intelligence and automation platform for businesses that depend on environmental conditions.**
 
