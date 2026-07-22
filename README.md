@@ -11,7 +11,7 @@ Weatherpulse helps developers build weather-aware applications by synchronizing 
 ## 📸 Dashboard & Alerts
 
 **Dashboard**
-![Weatherpulse Dashboard](assets/dashboard.jpg)
+![Weatherpulse Dashboard](assets/dashboard.png)
 
 **Alerts**
 ![Weatherpulse Alerts](assets/alerts.jpg)
