@@ -3,11 +3,54 @@ import { CloudLightning, Search, Bell, Settings, LayoutDashboard, Users, Map as 
 
 export default function DemoDashboard() {
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [weatherData, setWeatherData] = useState<{
+    nyAqi: number;
+    atlUv: number;
+    chiAqi: number;
+    dalUv: number;
+  } | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    async function fetchRealData() {
+      try {
+        // Fetch UV Index for Atlanta (1) and Dallas (3)
+        const uvRes = await fetch('https://api.open-meteo.com/v1/forecast?latitude=40.71,33.75,41.88,32.78&longitude=-74.01,-84.39,-87.63,-96.80&daily=uv_index_max&timezone=auto');
+        const uvData = await uvRes.json();
+        // Fetch AQI for NY (0) and Chicago (2)
+        const aqiRes = await fetch('https://air-quality-api.open-meteo.com/v1/air-quality?latitude=40.71,33.75,41.88,32.78&longitude=-74.01,-84.39,-87.63,-96.80&hourly=us_aqi');
+        const aqiData = await aqiRes.json();
+
+        setWeatherData({
+          nyAqi: aqiData.hourly.us_aqi[0] || 65,
+          atlUv: uvData.daily.uv_index_max[1] || 8,
+          chiAqi: aqiData.hourly.us_aqi[2] || 32,
+          dalUv: uvData.daily.uv_index_max[3] || 8,
+        });
+      } catch (e) {
+        console.error('Failed to fetch real data', e);
+      }
+    }
+    fetchRealData();
+  }, []);
+
+  const getAqiDetails = (aqi: number) => {
+    if (aqi <= 50) return { text: 'Good - Green', color: 'text-green-500', bg: 'bg-green-500/10' };
+    if (aqi <= 100) return { text: 'Moderate - Yellow', color: 'text-yellow-500', bg: 'bg-yellow-500/10' };
+    if (aqi <= 150) return { text: 'Unhealthy for Sensitive - Orange', color: 'text-orange-500', bg: 'bg-orange-500/10' };
+    return { text: 'Unhealthy - Red', color: 'text-red-500', bg: 'bg-red-500/10' };
+  };
+
+  const getUvDetails = (uv: number) => {
+    if (uv <= 2) return { text: 'Low - Green', color: 'text-green-500', bg: 'bg-green-500/10' };
+    if (uv <= 5) return { text: 'Moderate - Yellow', color: 'text-yellow-500', bg: 'bg-yellow-500/10' };
+    if (uv <= 7) return { text: 'High - Orange', color: 'text-orange-500', bg: 'bg-orange-500/10' };
+    return { text: 'Very High - Red', color: 'text-red-500', bg: 'bg-red-500/10' };
+  };
 
   return (
     <div className="min-h-screen bg-[#13151A] flex items-center justify-center p-8 font-sans">
@@ -113,24 +156,24 @@ export default function DemoDashboard() {
               {/* Metrics Cards */}
               <div className="grid grid-cols-4 gap-4 mb-6">
                 <div className="bg-[#1A1D24] p-4 rounded-xl border border-white/5 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+                  <div className={`absolute top-0 right-0 w-32 h-32 ${weatherData ? getAqiDetails(weatherData.nyAqi).bg : 'bg-yellow-500/10'} rounded-full blur-3xl -translate-y-1/2 translate-x-1/2`} />
                   <div className="text-slate-300 font-medium mb-1 relative z-10">New York</div>
-                  <div className="text-sm text-slate-400 relative z-10">AQI: <span className="text-yellow-500">65 Moderate - Yellow</span></div>
+                  <div className="text-sm text-slate-400 relative z-10">AQI: <span className={weatherData ? getAqiDetails(weatherData.nyAqi).color : 'text-yellow-500'}>{weatherData ? `${weatherData.nyAqi} ${getAqiDetails(weatherData.nyAqi).text}` : 'Loading...'}</span></div>
                 </div>
                 <div className="bg-[#1A1D24] p-4 rounded-xl border border-white/5 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+                  <div className={`absolute top-0 right-0 w-32 h-32 ${weatherData ? getUvDetails(weatherData.atlUv).bg : 'bg-orange-500/10'} rounded-full blur-3xl -translate-y-1/2 translate-x-1/2`} />
                   <div className="text-slate-300 font-medium mb-1 relative z-10">Atlanta</div>
-                  <div className="text-sm text-slate-400 relative z-10">UV Index: <span className="text-orange-500">8 High - Orange</span></div>
+                  <div className="text-sm text-slate-400 relative z-10">UV Index: <span className={weatherData ? getUvDetails(weatherData.atlUv).color : 'text-orange-500'}>{weatherData ? `${weatherData.atlUv} ${getUvDetails(weatherData.atlUv).text}` : 'Loading...'}</span></div>
                 </div>
                 <div className="bg-[#1A1D24] p-4 rounded-xl border border-white/5 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+                  <div className={`absolute top-0 right-0 w-32 h-32 ${weatherData ? getAqiDetails(weatherData.chiAqi).bg : 'bg-green-500/10'} rounded-full blur-3xl -translate-y-1/2 translate-x-1/2`} />
                   <div className="text-slate-300 font-medium mb-1 relative z-10">Chicago</div>
-                  <div className="text-sm text-slate-400 relative z-10">AQI: <span className="text-green-500">32 Good - Green</span></div>
+                  <div className="text-sm text-slate-400 relative z-10">AQI: <span className={weatherData ? getAqiDetails(weatherData.chiAqi).color : 'text-green-500'}>{weatherData ? `${weatherData.chiAqi} ${getAqiDetails(weatherData.chiAqi).text}` : 'Loading...'}</span></div>
                 </div>
                 <div className="bg-[#1A1D24] p-4 rounded-xl border border-white/5 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+                  <div className={`absolute top-0 right-0 w-32 h-32 ${weatherData ? getUvDetails(weatherData.dalUv).bg : 'bg-orange-500/10'} rounded-full blur-3xl -translate-y-1/2 translate-x-1/2`} />
                   <div className="text-slate-300 font-medium mb-1 relative z-10">Dallas</div>
-                  <div className="text-sm text-slate-400 relative z-10">UV Index: <span className="text-orange-500">8 High</span></div>
+                  <div className="text-sm text-slate-400 relative z-10">UV Index: <span className={weatherData ? getUvDetails(weatherData.dalUv).color : 'text-orange-500'}>{weatherData ? `${weatherData.dalUv} ${getUvDetails(weatherData.dalUv).text.split(' - ')[0]}` : 'Loading...'}</span></div>
                 </div>
               </div>
 
@@ -204,7 +247,7 @@ export default function DemoDashboard() {
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 <div className="px-4 py-1.5 rounded-full bg-[#161920] border border-white/5 text-xs text-slate-400">
-                  Scollable
+                  Scrollable
                 </div>
                 <button className="w-8 h-8 rounded-lg bg-[#161920] border border-white/5 flex items-center justify-center text-slate-400 hover:text-white">
                   <ChevronRight className="w-4 h-4" />
@@ -266,7 +309,7 @@ export default function DemoDashboard() {
 
                   <div className="text-center relative z-10 flex-1 flex flex-col">
                     <h2 className="text-[1.3rem] font-bold text-white mb-2 leading-tight">
-                      <span className="text-cyan-400">Exteme Weather</span><br/>
+                      Extreme Weather<br/>
                       Detected: <span className="text-red-500">1.5x<br/>Surge Pricing</span><br/>
                       Activated
                     </h2>
@@ -277,7 +320,7 @@ export default function DemoDashboard() {
                         <CloudLightning className="w-16 h-16 text-cyan-400 drop-shadow-[0_0_15px_rgba(34,211,238,0.5)]" strokeWidth={1.5} />
                         <Zap className="absolute bottom-1 right-2 w-8 h-8 text-red-500 drop-shadow-[0_0_15px_rgba(239,68,68,0.8)] animate-pulse" />
                       </div>
-                      <div className="text-slate-300 font-mono tracking-widest">14:32:01</div>
+                      <div className="text-slate-300 font-mono tracking-widest">{currentTime.toLocaleTimeString('en-US', { hour12: false })}</div>
                     </div>
                     
                     <div className="text-left text-sm space-y-1 mt-2">
@@ -294,9 +337,9 @@ export default function DemoDashboard() {
                       <ChevronDown className="w-4 h-4 text-slate-500 rotate-180" />
                     </div>
                     <p className="text-xs text-slate-400 leading-relaxed">
-                      WeatherWeather Detected:<br/>
-                      Event: Severe Thuneration<br/>
-                      SE USA, Event: Severe Thunderstorms & Surge Applied to 3 Cllents.
+                      Extreme Weather Detected:<br/>
+                      Event: Severe Thunderstorms<br/>
+                      SE USA, Event: Severe Thunderstorms & Surge Applied to 3 Clients.
                     </p>
                   </div>
                 </div>
