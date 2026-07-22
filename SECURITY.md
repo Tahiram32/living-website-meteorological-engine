@@ -10,4 +10,4 @@ Security updates are provided for the latest major release.
 ## Reporting a Vulnerability
 If you discover a potential security issue in Weatherpulse, please notify us immediately. We will investigate all legitimate reports.
 
-**Do not open a public issue.** Instead, please email the security team at security@weatherpulse.dev. We aim to respond within 48 hours.
+Please report any security issues by opening an issue on our GitHub repository. We will investigate all legitimate reports and aim to respond as quickly as possible.
