@@ -1,47 +1,47 @@
-# Weatherpulse Sync Engine
+# 🌦️ Weatherpulse Sync Engine
 
-[![GitHub stars](https://img.shields.io/github/stars/Tahiram32/weatherpulse?style=social)](https://github.com/Tahiram32/weatherpulse/stargazers)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![CI Status](https://github.com/Tahiram32/weatherpulse/actions/workflows/weather-sync.yml/badge.svg)](https://github.com/Tahiram32/weatherpulse/actions)
-[![Sentry](https://img.shields.io/badge/Sentry-Monitoring-362D59?logo=sentry&logoColor=white)](https://sentry.io/)
+> Open-source weather synchronization infrastructure for multi-tenant applications.
 
+Weatherpulse helps developers build weather-aware applications by synchronizing weather data, managing background jobs, and delivering event-driven alerts across multiple clients.
 
-**An open-source weather intelligence and automation platform for businesses that depend on environmental conditions.**
+[Live Demo](http://localhost:3000) • [Documentation](docs/getting-started.md) • [Report Bug](https://github.com/Tahiram32/weatherpulse/issues) • [GitHub Sponsors](https://github.com/sponsors/Tahiram32)
 
-**[🔴 View the Live Demo](https://weatherpulse-gray.vercel.app/)**
+---
 
+## 📸 Dashboard & Alerts
+
+**Dashboard**
 ![Weatherpulse Dashboard](assets/dashboard.jpg)
 
-Weatherpulse is a **Node.js weather API** and **multi-tenant weather platform** designed to synchronize hyper-local weather data for a fleet of clients. 
+**Alerts**
+![Weatherpulse Alerts](assets/alerts.jpg)
 
-Operating as a robust **weather dashboard backend** and **weather alert engine**, it aggregates local weather conditions and dispatches background tasks to update client dashboards based on severe weather fluctuations. Weatherpulse synchronizes weather data across multiple tenants using background workers, Firebase-backed data isolation, and event-driven alerts. Designed to support multi-tenant weather synchronization workloads.
+**Tenant Manager**
+![Weatherpulse Tenant Manager](assets/tenant-manager.jpg)
 
-## 🌟 Concrete Features
+## 📖 The Story: Why We Built This
 
-- **Multi-Provider Data Aggregation**: Aggregates weather, AQI, and UV data from multiple providers.
-- **Multi-Tenant Synchronization**: Synchronizes weather updates across multiple tenants simultaneously.
-- **Asynchronous Worker Pool**: Queues background jobs using rate-limited workers to prevent API exhaustion.
-- **Event-Driven Alerts**: Automatic severe weather notifications and conditional triggers (e.g. Surge Pricing multipliers).
-- **Secure Data Isolation**: Firebase-backed client isolation and robust JSON credential parsing for CI/CD environments.
-- **Sentry Telemetry**: Comprehensive error monitoring and node performance tracing.
-- **Automated Pipelines**: GitHub Actions CI/CD workflows built-in.
+Existing weather APIs provide data, but many applications still need to poll providers, isolate tenants, schedule background synchronization, and notify users when conditions change. Weatherpulse aims to provide those building blocks as an open-source project.
 
-## ⚡ Benchmarks
+## 🌟 Features
 
-- ✓ **50** tenants
-- ✓ **5,000** weather updates/hour
-- ✓ **250ms** average sync latency
-- ✓ **25** worker pool concurrency
+- **Unified Data Aggregation**: Retrieve weather, UV, and AQI information from multiple providers through a unified synchronization pipeline.
+- **Multi-Tenant Synchronization**: Synchronize weather updates across multiple client deployments concurrently.
+- **Asynchronous Worker Pool**: Queue background jobs using rate-limited workers to prevent API exhaustion.
+- **Event-Driven Alerts**: Trigger automatic severe weather notifications and conditional actions (e.g. Surge Pricing multipliers) based on changing conditions.
+- **Secure Data Isolation**: Enforce Firebase-backed client isolation and robust JSON credential parsing for CI/CD environments.
+- **Sentry Telemetry**: Monitor worker failures and performance with built-in Sentry integration.
+- **Automated Pipelines**: Deploy easily with GitHub Actions CI/CD workflows built-in.
 
 ## 🏗️ Architecture
 
 ```mermaid
 graph TD
-    API[Weather API] --> Engine[Polling Engine]
+    API[Weather APIs] --> Engine[Sync Engine]
     Engine --> Queue[Worker Queue]
     Queue --> Firebase[(Firebase)]
-    Queue --> Alerts[Alerts]
-    Firebase --> Clients[Dashboard Clients]
+    Queue --> Alerts[Alert Engine]
+    Firebase --> Clients[Client Dashboards]
     Alerts --> Clients
 ```
 
@@ -62,16 +62,6 @@ curl http://localhost:3000/api/weather?tenant=demo
   ]
 }
 ```
-
-## ⚖️ Why Weatherpulse?
-
-| Feature | Weatherpulse | Basic Weather API |
-| :--- | :---: | :---: |
-| Multi-tenant | ✅ | ❌ |
-| Background workers | ✅ | ❌ |
-| Firebase integration | ✅ | ❌ |
-| Sentry telemetry | ✅ | ❌ |
-| Alert engine | ✅ | ❌ |
 
 ## 🎯 Who is this for?
 
@@ -96,44 +86,41 @@ curl http://localhost:3000/api/weather?tenant=demo
    npm run dev
    ```
 
-## 👁️ Sentry Telemetry
+## 📚 Documentation
 
-This project utilizes Sentry for full-stack observability:
-- **Backend Orchestrator**: Uses `@sentry/node` and `@sentry/profiling-node` to trace execution time, CPU spikes, and ensure the background worker pool never encounters event-loop starvation.
-- **Frontend**: Uses `@sentry/react` to capture client-side dashboard anomalies and session replays.
+For complete documentation, check out the `docs/` folder:
+- [Getting Started](docs/getting-started.md)
+- [Architecture](docs/architecture.md)
+- [API Reference](docs/api.md)
+- [Deployment Guide](docs/deployment.md)
+- [Firebase Setup](docs/firebase.md)
+- [Security Guide](docs/security.md)
+
+## ❤️ Why Open Source?
+
+Weatherpulse is developed in the open so developers can inspect, extend, and deploy it without vendor lock-in.
+
+Community feedback helps shape the roadmap, improve reliability, and add support for additional weather providers.
+
+## ❤️ Sponsor Weatherpulse
+
+GitHub Sponsors help fund:
+
+- Hosting the public demo
+- Additional weather provider integrations
+- Better documentation and tutorials
+- CI infrastructure and automated testing
+- Security reviews and dependency updates
+
+If Weatherpulse saves you development time or supports your work, consider sponsoring the project.
+
+→ [Sponsor @Tahiram32 on GitHub](https://github.com/sponsors/Tahiram32)
 
 ## 🤝 Contributing
 Contributions are welcome! Please read `CONTRIBUTING.md` for guidelines on setting up the dev environment, running tests, and submitting pull requests.
 
-This project follows the Contributor Covenant Code of Conduct.
+## 🔒 Security
+Please refer to our [Security Policy](SECURITY.md) for supported versions and how to report vulnerabilities.
 
 ## 📄 License
 This project is licensed under the MIT License — see the LICENSE file for details.
-
-## 🗺️ Roadmap
-
-✅ **Q1:** Multi-tenant engine, Weather synchronization, Sentry monitoring
-✅ **Q2:** Advanced UI refactor, CI/CD Actions, AI Micro-climate Engine
-⬜ **Q3:** Kubernetes deployment, Additional weather providers, AI anomaly detection
-⬜ **Q4:** Mobile dashboard, Enterprise authentication, IoT Integrations
-
-## ❤️ Sponsorship Impact
-
-Sponsors help fund:
-
-- ☁️ Cloud infrastructure for public demos
-- 🌩️ More weather provider integrations
-- 📊 Advanced analytics dashboards
-- 🔐 Enterprise security improvements
-- 📚 Production deployment guides
-- 🧪 Automated testing infrastructure
-
-Your sponsorship directly funds features that benefit organizations using weather intelligence infrastructure.
-
-→ [Sponsor @Tahiram32 on GitHub](https://github.com/sponsors/Tahiram32)
-
-Every contribution — no matter the size — helps keep this project alive and moving forward. Thank you! 🙏
-
-## 🏢 Built with Weatherpulse
-
-*Are you using Weatherpulse in production? [Open a PR](https://github.com/Tahiram32/weatherpulse/pulls) to add your organization here!*

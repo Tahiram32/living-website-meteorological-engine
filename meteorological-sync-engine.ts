@@ -154,7 +154,7 @@ const db = getFirestore(adminApp, firebaseConfig.firestoreDatabaseId || "(defaul
 const apiKey = process.env.GEMINI_API_KEY || "";
 const hasRealApiKey = apiKey && apiKey !== "MY_GEMINI_API_KEY";
 
-if (!hasRealApiKey && process.env.NODE_ENV === "production") {
+if (!hasRealApiKey && process.env.NODE_ENV === "production" && process.env.SANDBOX_MODE !== "true") {
   throw new Error("🚨 [FATAL ERROR] GEMINI_API_KEY is missing or invalid. Refusing to boot with dummy key in production.");
 }
 

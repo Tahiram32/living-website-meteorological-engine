@@ -1472,6 +1472,45 @@ app.post(
     }
   },
 );
+
+// 3.6.5. Weather Simulation Mode API for Demos
+app.post("/api/simulate", requireRole(["gateway", "unified"]), async (req, res) => {
+  const { tenantDomain, scenario } = req.body;
+  if (!tenantDomain || !scenario) {
+    return res.status(400).json({ error: "Missing tenantDomain or scenario" });
+  }
+
+  let simulatedWeather: any = { source: "Simulation Engine" };
+  switch(scenario) {
+    case "blizzard":
+      simulatedWeather = { temp: -10, humidity: 80, condition: "Blizzard", wind_speed: 60, precipitation: 5, isExtreme: true, source: "Simulation Engine" };
+      break;
+    case "tornado":
+      simulatedWeather = { temp: 75, humidity: 90, condition: "Tornado Warning", wind_speed: 120, precipitation: 2, isExtreme: true, source: "Simulation Engine" };
+      break;
+    case "heat_wave":
+      simulatedWeather = { temp: 115, humidity: 20, condition: "Extreme Heat", wind_speed: 5, precipitation: 0, isExtreme: true, aqi: 150, uvIndex: 11, surgeMultiplier: 1.5, source: "Simulation Engine" };
+      break;
+    case "flood":
+      simulatedWeather = { temp: 60, humidity: 100, condition: "Flash Flood", wind_speed: 25, precipitation: 10, isExtreme: true, source: "Simulation Engine" };
+      break;
+    case "aqi_spike":
+      simulatedWeather = { temp: 85, humidity: 40, condition: "Smog", wind_speed: 2, precipitation: 0, isExtreme: true, aqi: 300, source: "Simulation Engine" };
+      break;
+    default:
+      simulatedWeather = { temp: 72, humidity: 50, condition: "Clear", wind_speed: 5, precipitation: 0, isExtreme: false, source: "Simulation Engine" };
+  }
+
+  try {
+    const logRefId = "sim_" + Date.now();
+    await executeSingleClientSyncTask(tenantDomain, simulatedWeather, logRefId);
+    res.json({ success: true, message: `Simulated ${scenario} for ${tenantDomain}` });
+  } catch (error: any) {
+    console.error("Simulation failed:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // 3.6. Secure Task Worker Endpoint for Distributed Google Cloud Tasks / Simulated Workers
 app.post(
   "/api/pipeline/task-worker",
