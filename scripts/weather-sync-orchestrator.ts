@@ -48,6 +48,7 @@ if (serviceAccountKey && serviceAccountKey.trim() !== "") {
     let cleanedKey = serviceAccountKey.trim();
     const start = cleanedKey.indexOf('{');
     if (start !== -1) {
+      console.log("🔍 [INIT] Executing Token-Aware JSON Extractor...");
       let depth = 0;
       let inString = false;
       let escape = false;
