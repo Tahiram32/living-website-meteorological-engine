@@ -7,7 +7,7 @@
 
 **An open-source weather intelligence and automation platform for businesses that depend on environmental conditions.**
 
-**[🔴 View the Live Demo](https://demo.weatherpulse.dev)**
+**[🔴 View the Live Demo](https://weatherpulse-gray.vercel.app/)**
 
 ![Weatherpulse Dashboard](assets/dashboard.jpg)
 
